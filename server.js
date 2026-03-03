@@ -34,6 +34,7 @@ const calendarRoutes = require('./routes/calendar'); // NEW
 const adminBookingsRoutes = require('./routes/bookings');
 const packageBookingRoutes = require('./routes/packageBookings');
 const ratingRoutes = require('./routes/ratings'); // NEW
+const userRoutes = require('./routes/users'); // Admin Auth
 
 app.use('/api', ratingRoutes); // Mounts /api/admin/ratings and /api/ratings
 app.use('/api/hotels', hotelRoutes);
@@ -47,6 +48,7 @@ app.use('/api/admin/properties', adminPropertyRoutes);
 app.use('/api/admin/calendar', calendarRoutes);
 app.use('/api/bookings', adminBookingsRoutes);
 app.use('/api/package-bookings', packageBookingRoutes);
+app.use('/api/users', userRoutes);
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
