@@ -82,7 +82,7 @@ router.get('/accommodations', async (req, res) => {
                 available: true,
                 features: hotel.amenities || [],
                 images: hotel.images || [],
-                roomTypes: rooms.map(r => ({ id: r._id, name: r.name, inventory: r.inventory, price: r.price })),
+                roomTypes: rooms.map(r => ({ id: r._id, name: r.name, type: r.type, inventory: r.inventory, price: r.price })),
                 location: {
                     address: hotel.location || '',
                     coordinates: {

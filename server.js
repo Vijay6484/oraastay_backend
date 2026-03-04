@@ -32,7 +32,9 @@ app.use(cors({
 app.use(express.json());
 
 // Database Connection
-mongoose.connect(MONGODB_URI)
+mongoose.connect(MONGODB_URI, {
+    tls: true,
+})
     .then(() => console.log('MongoDB connected successfully'))
     .catch(err => console.error('MongoDB connection error:', err));
 
