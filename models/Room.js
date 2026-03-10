@@ -6,6 +6,8 @@ const RoomSchema = new mongoose.Schema({
     type: { type: String, default: 'Standard' },
     description: { type: String },
     price: { type: Number, required: true },
+    adultRate: { type: Number, default: 0 },
+    childRate: { type: Number, default: 0 },
     capacity: {
         adults: { type: Number, default: 2 },
         children: { type: Number, default: 0 }

@@ -15,6 +15,16 @@ const PackageSchema = new mongoose.Schema({
     images: [{ type: String }],  // multiple images
     image: { type: String },  // primary image (backward compat)
     category: { type: String, enum: ['Couple', 'Family', 'Group', 'Adventure'], default: 'Couple' },
+    subcategory: {
+        type: String,
+        enum: [
+            'Honeymoon Packages',
+            'Family Tour Packages',
+            'Weekend Packages',
+            'Tour Package from Mumbai',
+            'Tour Package from Pune'
+        ]
+    },
     isActive: { type: Boolean, default: true },
 }, { timestamps: true });
 

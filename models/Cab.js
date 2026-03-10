@@ -8,6 +8,15 @@ const CabSchema = new mongoose.Schema({
     features: [{ type: String }], // e.g., "AC", "4 Seater"
     image: { type: String }, // Keep for backward compatibility
     images: [{ type: String }],
+    subcategory: {
+        type: String,
+        enum: [
+            'Mumbai to Mahabaleshwar',
+            'Pune to Mahabaleshwar',
+            'Local Sightseeing',
+            'Airport Transfer'
+        ]
+    },
     available: { type: Boolean, default: true }
 }, { timestamps: true });
 

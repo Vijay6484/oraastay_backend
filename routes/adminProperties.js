@@ -81,6 +81,7 @@ router.get('/accommodations', async (req, res) => {
                 rooms: hotel.inventory || rooms.length || 0,
                 available: true,
                 features: hotel.amenities || [],
+                rules: hotel.rules || [],
                 images: hotel.images || [],
                 roomTypes: rooms.map(r => ({ id: r._id, name: r.name, type: r.type, inventory: r.inventory, price: r.price })),
                 location: {
@@ -143,6 +144,7 @@ router.get('/accommodations/:id', async (req, res) => {
                 location: hotel.location,
                 price: hotel.price,
                 amenities: hotel.amenities,
+                rules: hotel.rules || [],
                 images: hotel.images,
                 inventory: hotel.inventory,
             },
