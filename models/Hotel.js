@@ -10,6 +10,7 @@ const HotelSchema = new mongoose.Schema({
     originalPrice: { type: Number },
     amenities: [{ type: String }],
     images: [{ type: String }], // Array of image URLs
+    video: { type: String }, // Video URL
     featured: { type: Boolean, default: false },
     type: {
         type: String,
