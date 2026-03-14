@@ -18,17 +18,18 @@ router.get('/', async (req, res) => {
 // Create cab booking
 router.post('/', async (req, res) => {
     try {
-        const { guestName, guestPhone, tripType, pickup, drop, date, time, vehicle } = req.body;
+        const { guestName, guestPhone, guestEmail, tripType, pickup, drop, date, time, vehicle } = req.body;
 
         const newBooking = new CabBooking({
             guestName,
             guestPhone,
-            tripType,
-            pickup,
-            drop,
-            date,
-            time,
-            vehicle
+            guestEmail: guestEmail || undefined,
+            tripType: tripType || 'roundtrip',
+            pickup: pickup || 'To be confirmed',
+            drop: drop || 'To be confirmed',
+            date: date || new Date().toISOString().split('T')[0],
+            time: time || '09:00',
+            vehicle: vehicle || 'Looking for suitable vehicle'
         });
 
         await newBooking.save();

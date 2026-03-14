@@ -52,6 +52,31 @@ router.post('/admin/ratings', async (req, res) => {
     }
 });
 
+// PATCH - toggle isActive (show/hide on website)
+router.patch('/admin/ratings/:id', async (req, res) => {
+    try {
+        const { isActive } = req.body;
+        const rating = await Rating.findByIdAndUpdate(
+            req.params.id,
+            { isActive: isActive !== false },
+            { new: true }
+        );
+        if (!rating) return res.status(404).json({ message: 'Rating not found' });
+        res.json({
+            id: rating._id,
+            guestName: rating.guestName,
+            image: rating.image,
+            rating: rating.rating,
+            review: rating.review,
+            propertyName: rating.propertyName,
+            date: rating.date,
+            isActive: rating.isActive
+        });
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
 // DELETE a rating
 router.delete('/admin/ratings/:id', async (req, res) => {
     try {
