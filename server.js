@@ -58,6 +58,9 @@ const packageBookingRoutes = require('./routes/packageBookings');
 const ratingRoutes = require('./routes/ratings'); // NEW
 const userRoutes = require('./routes/users'); // Admin Auth
 const travelGuideRoutes = require('./routes/travelGuide');
+const paymentRoutes = require('./routes/payments');
+const couponRoutes = require('./routes/coupons');
+const couponPublicRoutes = require('./routes/couponPublic');
 
 app.use('/api', ratingRoutes); // Mounts /api/admin/ratings and /api/ratings
 app.use('/api/hotels', hotelRoutes);
@@ -73,6 +76,9 @@ app.use('/api/bookings', adminBookingsRoutes);
 app.use('/api/package-bookings', packageBookingRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/travel-guide', travelGuideRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/admin/coupons', couponRoutes);
+app.use('/api/coupons', couponPublicRoutes);
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);

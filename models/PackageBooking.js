@@ -35,6 +35,13 @@ const packageBookingSchema = new mongoose.Schema({
     primaryGuestEmail: { type: String, required: true },
     primaryGuestPhone: { type: String, required: true },
     totalGuests: { type: Number },  // adults + children
+    amount: { type: Number },
+    paymentStatus: {
+        type: String,
+        enum: ['success', 'failed', 'pending', ''],
+        default: 'pending'
+    },
+    paymentTxnId: { type: String, default: null },
     status: {
         type: String,
         enum: ['Pending', 'Confirmed', 'Cancelled'],

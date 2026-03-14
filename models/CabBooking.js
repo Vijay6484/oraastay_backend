@@ -34,6 +34,14 @@ const cabBookingSchema = new mongoose.Schema({
         type: String,
         default: 'Looking for suitable vehicle'
     },
+    guestEmail: { type: String },
+    amount: { type: Number },
+    paymentStatus: {
+        type: String,
+        enum: ['success', 'failed', 'pending', ''],
+        default: 'pending'
+    },
+    paymentTxnId: { type: String, default: null },
     status: {
         type: String,
         enum: ['Pending', 'Confirmed', 'Cancelled'],
