@@ -7,6 +7,7 @@ const Hotel = require('../models/Hotel');
 const Package = require('../models/Package');
 const Cab = require('../models/Cab');
 const Activity = require('../models/Activity');
+const Gallery = require('../models/Gallery');
 
 // GET dashboard stats
 router.get('/stats', async (req, res) => {
@@ -55,7 +56,7 @@ router.get('/quick-stats', async (req, res) => {
 
         const [accommodations, gallery, packages, cabs, todayRoom, todayCab, todayPackage] = await Promise.all([
             Hotel.countDocuments(),
-            Activity.countDocuments(),
+            Gallery.countDocuments(),
             Package.countDocuments(),
             Cab.countDocuments(),
             RoomBooking.countDocuments({ checkInDate: today }),
