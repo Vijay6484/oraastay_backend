@@ -63,9 +63,11 @@ const couponRoutes = require('./routes/coupons');
 const couponPublicRoutes = require('./routes/couponPublic');
 const dashboardRoutes = require('./routes/dashboard');
 const galleryRoutes = require('./routes/gallery');
+const amenitiesRoutes = require('./routes/amenities');
 
 app.use('/api', ratingRoutes);
 app.use('/api', galleryRoutes);
+app.use('/api', amenitiesRoutes);
 app.use('/api/dashboard', dashboardRoutes); // Mounts /api/admin/ratings and /api/ratings
 app.use('/api/hotels', hotelRoutes);
 app.use('/api/packages', packageRoutes);
