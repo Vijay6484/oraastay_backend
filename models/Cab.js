@@ -6,11 +6,18 @@ const CabSchema = new mongoose.Schema({
     driverName: { type: String },
     driverPhone: { type: String },
     driverEmail: { type: String },
+    // Legacy per-km pricing (no longer used in UI)
     pricePerKm: { type: Number },
-    basePrice: { type: Number }, // For standard packages
+    basePrice: { type: Number }, // For standard packages / legacy flows
+    // Fixed prices for common routes/options
+    mumbaiToMahabaleshwarPrice: { type: Number },
+    puneToMahabaleshwarPrice: { type: Number },
+    localSightseeingPrice: { type: Number },
+    airportTransferPrice: { type: Number },
     features: [{ type: String }], // e.g., "AC", "4 Seater"
     image: { type: String }, // Keep for backward compatibility
     images: [{ type: String }],
+    // Legacy subcategory (header now links to unified cabs page)
     subcategory: {
         type: String,
         enum: [

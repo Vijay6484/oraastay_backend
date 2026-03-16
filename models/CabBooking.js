@@ -36,6 +36,7 @@ const cabBookingSchema = new mongoose.Schema({
     },
     guestEmail: { type: String },
     amount: { type: Number },
+    selectedOption: { type: String }, // e.g. "Mumbai to Mahabaleshwar"
     paymentStatus: {
         type: String,
         enum: ['success', 'failed', 'pending', ''],
