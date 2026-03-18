@@ -14,7 +14,18 @@ const HotelSchema = new mongoose.Schema({
     featured: { type: Boolean, default: false },
     type: {
         type: String,
-        enum: ['Hotel', 'Resort', 'Villa'],
+        enum: [
+            'Hotel',
+            'Resort',
+            'Villa',
+            'Cottage',
+            'Glamping',
+            'Camping',
+            'Bungalow',
+            'Apartment',
+            'Homestay',
+            'Farmhouse'
+        ],
         default: 'Hotel'
     },
     subcategory: {
