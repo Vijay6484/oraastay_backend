@@ -4,6 +4,7 @@ const CabBooking = require('../models/CabBooking');
 const RoomBooking = require('../models/RoomBooking');
 const PackageBooking = require('../models/PackageBooking');
 const { createPaymentParams, getPaymentFormHtml, isPayUConfigured } = require('../services/paymentService');
+const { getRoomAvailability } = require('../services/roomAvailability');
 const {
     sendCabBookingConfirmation,
     sendHotelBookingConfirmation,
@@ -69,8 +70,26 @@ router.post('/initiate/hotel', async (req, res) => {
     }
     try {
         const { roomId, hotelId, guestName, guestEmail, guestPhone, checkInDate, checkOutDate, guests, totalAmount } = req.body;
-        if (!roomId || !hotelId || !guestName || !guestEmail || !totalAmount) {
+        if (!roomId || !hotelId || !guestName || !guestEmail || !checkInDate || !checkOutDate || !totalAmount) {
             return res.status(400).json({ success: false, message: 'Missing required fields' });
+        }
+
+        const requestedRooms = guests?.rooms || 1;
+        const availability = await getRoomAvailability({
+            roomId,
+            checkInDate,
+            checkOutDate,
+        });
+
+        if (!availability?.success) {
+            return res.status(400).json({ success: false, message: availability?.message || 'Unable to verify availability' });
+        }
+
+        if (requestedRooms > availability.data.minRemaining) {
+            return res.status(409).json({
+                success: false,
+                message: `Only ${availability.data.minRemaining} room(s) available for the selected dates.`,
+            });
         }
 
         const booking = new RoomBooking({
