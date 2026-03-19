@@ -13,7 +13,10 @@ const CabSchema = new mongoose.Schema({
     mumbaiToMahabaleshwarPrice: { type: Number },
     puneToMahabaleshwarPrice: { type: Number },
     localSightseeingPrice: { type: Number },
+    // Airport transfer prices: legacy single value + new from-specific values
     airportTransferPrice: { type: Number },
+    airportTransferFromPunePrice: { type: Number },
+    airportTransferFromMumbaiPrice: { type: Number },
     features: [{ type: String }], // e.g., "AC", "4 Seater"
     image: { type: String }, // Keep for backward compatibility
     images: [{ type: String }],
