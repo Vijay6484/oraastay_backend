@@ -7,27 +7,46 @@ const app = express();
 const PORT = process.env.PORT;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/mahabaleshwar_db';
 
-// Middleware
-const allowedOrigins = [
+// Middleware — CORS (browser admin + main site + env extras)
+const defaultOrigins = [
     'http://localhost:5173',
     'http://localhost:5174',
+    'http://localhost:3000',
     'http://oraastay.com',
     'https://oraastay.com',
     'http://www.oraastay.com',
     'https://www.oraastay.com',
     'http://admin.oraastay.com',
-    'https://admin.oraastay.com'
+    'https://admin.oraastay.com',
 ];
 
+const envOrigins = (process.env.CORS_ORIGINS || '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+const allowedOrigins = [...new Set([...defaultOrigins, ...envOrigins])];
+
+/** https://oraastay.com, https://admin.oraastay.com, https://any.sub.oraastay.com */
+function isOraastayOrigin(origin) {
+    return /^https?:\/\/([a-z0-9-]+\.)*oraastay\.com$/i.test(origin);
+}
+
 app.use(cors({
-    origin: function (origin, callback) {
-        if (!origin || allowedOrigins.includes(origin)) {
-            callback(null, true);
-        } else {
-            callback(new Error('Not allowed by CORS'));
+    origin(origin, callback) {
+        // Same-origin / server-to-server / curl (no Origin header)
+        if (!origin) {
+            return callback(null, true);
         }
+        if (allowedOrigins.includes(origin) || isOraastayOrigin(origin)) {
+            return callback(null, true);
+        }
+        console.warn('[CORS] Blocked origin:', origin);
+        return callback(null, false);
     },
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 app.use(express.json());
 
