@@ -85,7 +85,9 @@ const couponPublicRoutes = require('./routes/couponPublic');
 const dashboardRoutes = require('./routes/dashboard');
 const galleryRoutes = require('./routes/gallery');
 const amenitiesRoutes = require('./routes/amenities');
+const promotionRoutes = require('./routes/promotions');
 
+app.use('/api', promotionRoutes);
 app.use('/api', ratingRoutes);
 app.use('/api', galleryRoutes);
 app.use('/api', amenitiesRoutes);
