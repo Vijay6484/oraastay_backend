@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Package = require('../models/Package');
+const { requireAuth, requireModuleAccess } = require('../middleware/auth');
+const requirePackagesAdmin = [requireAuth, requireModuleAccess('packages')];
 
 // Get all packages
 router.get('/', async (req, res) => {
@@ -13,7 +15,7 @@ router.get('/', async (req, res) => {
 });
 
 // Get all packages (admin - includes inactive)
-router.get('/admin/all', async (req, res) => {
+router.get('/admin/all', ...requirePackagesAdmin, async (req, res) => {
     try {
         const packages = await Package.find().sort({ createdAt: -1 });
         res.json(packages);
@@ -34,7 +36,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create package
-router.post('/', async (req, res) => {
+router.post('/', ...requirePackagesAdmin, async (req, res) => {
     const newPackage = new Package(req.body);
     try {
         const savedPackage = await newPackage.save();
@@ -45,7 +47,7 @@ router.post('/', async (req, res) => {
 });
 
 // Update package
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', ...requirePackagesAdmin, async (req, res) => {
     try {
         const updatedPackage = await Package.findByIdAndUpdate(req.params.id, req.body, { new: true });
         if (!updatedPackage) return res.status(404).json({ message: 'Package not found' });
@@ -56,7 +58,7 @@ router.patch('/:id', async (req, res) => {
 });
 
 // Delete package
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', ...requirePackagesAdmin, async (req, res) => {
     try {
         await Package.findByIdAndDelete(req.params.id);
         res.json({ message: 'Package deleted' });

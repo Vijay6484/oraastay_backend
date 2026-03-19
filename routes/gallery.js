@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Gallery = require('../models/Gallery');
+const { requireAuth, requireModuleAccess } = require('../middleware/auth');
+const requireGalleryAdmin = [requireAuth, requireModuleAccess('gallery')];
 
 // Public: GET gallery images for website (e.g. Mahabaleshwar in Frames)
 router.get('/gallery', async (req, res) => {
@@ -13,7 +15,7 @@ router.get('/gallery', async (req, res) => {
 });
 
 // Admin: GET gallery list with optional category and search
-router.get('/admin/gallery', async (req, res) => {
+router.get('/admin/gallery', ...requireGalleryAdmin, async (req, res) => {
     try {
         const { category, search, limit = 100, offset = 0 } = req.query;
         const filter = {};
@@ -48,7 +50,7 @@ router.get('/admin/gallery', async (req, res) => {
 });
 
 // Admin: GET gallery stats
-router.get('/admin/gallery/stats', async (req, res) => {
+router.get('/admin/gallery/stats', ...requireGalleryAdmin, async (req, res) => {
     try {
         const total = await Gallery.countDocuments();
         const by_category = await Gallery.aggregate([
@@ -62,7 +64,7 @@ router.get('/admin/gallery/stats', async (req, res) => {
 });
 
 // Admin: POST gallery (save image metadata after upload to PHP)
-router.post('/admin/gallery/upload', async (req, res) => {
+router.post('/admin/gallery/upload', ...requireGalleryAdmin, async (req, res) => {
     try {
         const { images, category, title, alt_text, description } = req.body;
         if (!images || !Array.isArray(images) || images.length === 0) {
@@ -96,7 +98,7 @@ router.post('/admin/gallery/upload', async (req, res) => {
 });
 
 // Admin: DELETE gallery image
-router.delete('/admin/gallery/:id', async (req, res) => {
+router.delete('/admin/gallery/:id', ...requireGalleryAdmin, async (req, res) => {
     try {
         const doc = await Gallery.findByIdAndDelete(req.params.id);
         if (!doc) return res.status(404).json({ error: 'Image not found' });

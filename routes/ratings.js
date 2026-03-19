@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const Rating = require('../models/Rating');
+const { requireAuth, requireModuleAccess } = require('../middleware/auth');
+const requireRatingsAdmin = [requireAuth, requireModuleAccess('ratings')];
 
 // GET all ratings for admin
-router.get('/admin/ratings', async (req, res) => {
+router.get('/admin/ratings', ...requireRatingsAdmin, async (req, res) => {
     try {
         const ratings = await Rating.find().sort({ createdAt: -1 });
         // Map to format expected by Admin Panel
@@ -24,7 +26,7 @@ router.get('/admin/ratings', async (req, res) => {
 });
 
 // POST a new rating
-router.post('/admin/ratings', async (req, res) => {
+router.post('/admin/ratings', ...requireRatingsAdmin, async (req, res) => {
     try {
         const newRating = new Rating({
             guestName: req.body.guestName,
@@ -53,7 +55,7 @@ router.post('/admin/ratings', async (req, res) => {
 });
 
 // PATCH - toggle isActive (show/hide on website)
-router.patch('/admin/ratings/:id', async (req, res) => {
+router.patch('/admin/ratings/:id', ...requireRatingsAdmin, async (req, res) => {
     try {
         const { isActive } = req.body;
         const rating = await Rating.findByIdAndUpdate(
@@ -78,7 +80,7 @@ router.patch('/admin/ratings/:id', async (req, res) => {
 });
 
 // DELETE a rating
-router.delete('/admin/ratings/:id', async (req, res) => {
+router.delete('/admin/ratings/:id', ...requireRatingsAdmin, async (req, res) => {
     try {
         const rating = await Rating.findByIdAndDelete(req.params.id);
         if (!rating) return res.status(404).json({ message: 'Rating not found' });

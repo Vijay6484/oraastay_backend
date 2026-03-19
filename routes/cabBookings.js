@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const CabBooking = require('../models/CabBooking');
+const { requireAuth, requireModuleAccess } = require('../middleware/auth');
+const requireCabBookingsAdmin = [requireAuth, requireModuleAccess('cab_bookings')];
 
 // Get all cab bookings
-router.get('/', async (req, res) => {
+router.get('/', ...requireCabBookingsAdmin, async (req, res) => {
     try {
         const bookings = await CabBooking.find().sort({ createdAt: -1 });
         // Return a response structure matches what `Bookings.tsx` expects, just to be safe if that pattern is reused, but here we can return simple array if we prefer.
@@ -55,7 +57,7 @@ router.post('/', async (req, res) => {
 });
 
 // Update booking status
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', ...requireCabBookingsAdmin, async (req, res) => {
     try {
         const { status } = req.body;
 
@@ -81,7 +83,7 @@ router.patch('/:id/status', async (req, res) => {
 });
 
 // Delete booking
-router.delete('/delete/:id', async (req, res) => {
+router.delete('/delete/:id', ...requireCabBookingsAdmin, async (req, res) => {
     try {
         const deletedBooking = await CabBooking.findByIdAndDelete(req.params.id);
 

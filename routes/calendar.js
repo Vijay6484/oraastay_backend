@@ -1,27 +1,38 @@
 const express = require('express');
 const router = express.Router();
 const BlockedDate = require('../models/BlockedDate');
-const Hotel = require('../models/Hotel'); // Used for validation/joins if needed
+const {
+    requireAuth,
+    requireModuleAccess,
+    getManagerHotelIds,
+    assertManagerOwnsHotel,
+} = require('../middleware/auth');
+
+router.use(requireAuth, requireModuleAccess('calendar'));
 
 // GET all blocked dates
 router.get('/blocked-dates', async (req, res) => {
     try {
         const query = {};
-        if (req.query.accommodation_id) {
-            query.accommodation_id = req.query.accommodation_id;
+
+        if (req.authUser.role === 'manager') {
+            const ids = await getManagerHotelIds(req.authUser.id);
+            query.accommodation_id = { $in: ids };
+        } else {
+            if (req.query.accommodation_id) {
+                query.accommodation_id = req.query.accommodation_id;
+            }
         }
 
         if (req.query.room_id) {
             query.room_id = req.query.room_id;
         }
 
-        // We use `.populate` if we want the actual Hotel Name instead of just ID
         const blockedDates = await BlockedDate.find(query)
             .populate('accommodation_id', 'name')
             .populate('room_id', 'name')
             .sort({ blocked_date: 1 });
 
-        // Map to standard response shape expected by Calendar.tsx
         const formatted = blockedDates.map(b => ({
             id: b._id,
             accommodation_id: b.accommodation_id?._id,
@@ -64,6 +75,11 @@ router.post('/blocked-dates', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Accommodation ID is required' });
         }
 
+        const allowed = await assertManagerOwnsHotel(req.authUser, accommodation_id);
+        if (!allowed) {
+            return res.status(403).json({ success: false, message: 'Access denied for this property' });
+        }
+
         const newBlocks = [];
         for (const dateStr of dates) {
             const blocked = new BlockedDate({
@@ -90,8 +106,19 @@ router.post('/blocked-dates', async (req, res) => {
 router.put('/blocked-dates/:id', async (req, res) => {
     try {
         const { id } = req.params;
+        const existing = await BlockedDate.findById(id);
+        if (!existing) {
+            return res.status(404).json({ success: false, message: 'Blocked date not found' });
+        }
+
+        const accId = (req.body.accommodation_id || existing.accommodation_id).toString();
+        const allowed = await assertManagerOwnsHotel(req.authUser, accId);
+        if (!allowed) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+
         const {
-            dates, // Only takes dates[0]
+            dates,
             reason,
             accommodation_id,
             room_id,
@@ -115,10 +142,6 @@ router.put('/blocked-dates/:id', async (req, res) => {
 
         const updated = await BlockedDate.findByIdAndUpdate(id, updateData, { new: true });
 
-        if (!updated) {
-            return res.status(404).json({ success: false, message: 'Blocked date not found' });
-        }
-
         res.json({ success: true, message: 'Updated successfully', data: updated });
     } catch (error) {
         console.error('Error updating blocked date:', error);
@@ -130,11 +153,17 @@ router.put('/blocked-dates/:id', async (req, res) => {
 router.delete('/blocked-dates/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        const deleted = await BlockedDate.findByIdAndDelete(id);
-
-        if (!deleted) {
+        const existing = await BlockedDate.findById(id);
+        if (!existing) {
             return res.status(404).json({ success: false, message: 'Blocked date not found' });
         }
+
+        const allowed = await assertManagerOwnsHotel(req.authUser, existing.accommodation_id.toString());
+        if (!allowed) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+
+        await BlockedDate.findByIdAndDelete(id);
 
         res.json({ success: true, message: 'Deleted successfully' });
     } catch (error) {

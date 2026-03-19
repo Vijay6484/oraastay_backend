@@ -1,15 +1,56 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Hotel = require('../models/Hotel');
 const Room = require('../models/Room');
+const User = require('../models/User');
+const {
+    requireAuth,
+    requireModuleAccess,
+    assertManagerOwnsHotel,
+} = require('../middleware/auth');
+
+const requireProperties = [requireAuth, requireModuleAccess('properties')];
 
 // Utility to generate a slug
 const generateSlug = (name) => {
     return name.toLowerCase().replace(/[^a-z0-9]+/g, '-') + '-' + Date.now();
 };
 
+function formatHotelResponse(hotel, rooms) {
+    return {
+        id: hotel._id,
+        name: hotel.name,
+        type: hotel.type || 'Hotel',
+        description: hotel.description || '',
+        price: hotel.price || 0,
+        capacity: hotel.capacity || 2,
+        rooms: hotel.inventory || rooms.length || 0,
+        available: true,
+        features: hotel.amenities || [],
+        rules: hotel.rules || [],
+        images: hotel.images || [],
+        managerId: hotel.managerId || null,
+        roomTypes: rooms.map(r => ({ id: r._id, name: r.name, type: r.type, inventory: r.inventory, price: r.price })),
+        location: {
+            address: hotel.location || '',
+            coordinates: { latitude: null, longitude: null }
+        },
+        package: {
+            name: null,
+            description: '',
+            images: [],
+            pricing: { adult: '0', child: '0', maxGuests: 0 }
+        },
+        timestamps: {
+            createdAt: hotel.createdAt,
+            updatedAt: hotel.updatedAt
+        }
+    };
+}
+
 // CREATE Accommodation (Hotel + Rooms)
-router.post('/accommodations', async (req, res) => {
+router.post('/accommodations', ...requireProperties, async (req, res) => {
     try {
         const { propertyData, roomsData } = req.body;
 
@@ -17,20 +58,29 @@ router.post('/accommodations', async (req, res) => {
             return res.status(400).json({ message: 'Property data is required and must contain a name.' });
         }
 
-        // Gather all amenities from property and rooms to combine them
         const propertyAmenities = propertyData.amenities || [];
         const roomAmenities = (roomsData || []).reduce((acc, room) => [...acc, ...(room.amenities || [])], []);
-
-        // Combine into unique set
         const combinedAmenities = [...new Set([...propertyAmenities, ...roomAmenities])];
 
         const hotelData = {
             ...propertyData,
             slug: propertyData.slug || generateSlug(propertyData.name),
             amenities: combinedAmenities,
-            // Fallbacks for mapping if frontend sends `address` instead of `location`
             location: propertyData.location || propertyData.address || 'Unknown Location',
         };
+
+        delete hotelData._id;
+        delete hotelData.id;
+
+        if (req.authUser.role === 'manager') {
+            hotelData.managerId = new mongoose.Types.ObjectId(req.authUser.id);
+        } else if (req.authUser.role === 'admin' && propertyData.managerId) {
+            hotelData.managerId = mongoose.Types.ObjectId.isValid(propertyData.managerId)
+                ? new mongoose.Types.ObjectId(propertyData.managerId)
+                : null;
+        } else {
+            hotelData.managerId = hotelData.managerId || null;
+        }
 
         const hotel = new Hotel(hotelData);
         const savedHotel = await hotel.save();
@@ -38,10 +88,8 @@ router.post('/accommodations', async (req, res) => {
         const savedRooms = [];
         if (roomsData && Array.isArray(roomsData) && roomsData.length > 0) {
             for (const roomItem of roomsData) {
-                const roomData = {
-                    ...roomItem,
-                    hotelId: savedHotel._id,
-                };
+                const roomData = { ...roomItem, hotelId: savedHotel._id };
+                delete roomData._id;
                 const room = new Room(roomData);
                 const savedRoom = await room.save();
                 savedRooms.push(savedRoom);
@@ -59,56 +107,21 @@ router.post('/accommodations', async (req, res) => {
     }
 });
 
-// GET all accommodations
-router.get('/accommodations', async (req, res) => {
+// GET all accommodations (scoped for managers)
+router.get('/accommodations', ...requireProperties, async (req, res) => {
     try {
-        const hotels = await Hotel.find().sort({ createdAt: -1 });
+        const filter = {};
+        if (req.authUser.role === 'manager') {
+            filter.managerId = req.authUser.id;
+        }
 
-        // Map to an array of objects that the admin panel frontend expects
-        // Admin panel expects items with id, name, type, description, price, capacity, rooms, available, features, images, address etc
+        const hotels = await Hotel.find(filter).sort({ createdAt: -1 });
 
         const formattedHotels = await Promise.all(hotels.map(async (hotel) => {
-            // Count actual rooms or use inventory
             const rooms = await Room.find({ hotelId: hotel._id });
-
-            return {
-                id: hotel._id, // Map _id to id
-                name: hotel.name,
-                type: hotel.type || 'Hotel',
-                description: hotel.description || '',
-                price: hotel.price || 0,
-                capacity: hotel.capacity || 2, // Dummy fallback if not in model
-                rooms: hotel.inventory || rooms.length || 0,
-                available: true,
-                features: hotel.amenities || [],
-                rules: hotel.rules || [],
-                images: hotel.images || [],
-                roomTypes: rooms.map(r => ({ id: r._id, name: r.name, type: r.type, inventory: r.inventory, price: r.price })),
-                location: {
-                    address: hotel.location || '',
-                    coordinates: {
-                        latitude: null,
-                        longitude: null
-                    }
-                },
-                package: {
-                    name: null,
-                    description: '',
-                    images: [],
-                    pricing: {
-                        adult: '0',
-                        child: '0',
-                        maxGuests: 0
-                    }
-                },
-                timestamps: {
-                    createdAt: hotel.createdAt,
-                    updatedAt: hotel.updatedAt
-                }
-            };
+            return formatHotelResponse(hotel, rooms);
         }));
 
-        // Return pagination wrapper expected by frontend
         res.json({
             data: formattedHotels,
             pagination: {
@@ -120,18 +133,22 @@ router.get('/accommodations', async (req, res) => {
                 hasPrevPage: false
             }
         });
-
     } catch (error) {
         console.error('Error fetching accommodations:', error);
         res.status(500).json({ message: 'Internal Server Error', error: error.message });
     }
 });
 
-// GET accommodation by ID (with rooms)
-router.get('/accommodations/:id', async (req, res) => {
+// GET accommodation by ID
+router.get('/accommodations/:id', ...requireProperties, async (req, res) => {
     try {
         const hotel = await Hotel.findById(req.params.id);
         if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+
+        const allowed = await assertManagerOwnsHotel(req.authUser, hotel._id.toString());
+        if (!allowed) {
+            return res.status(403).json({ message: 'Access denied' });
+        }
 
         const rooms = await Room.find({ hotelId: hotel._id });
 
@@ -147,6 +164,7 @@ router.get('/accommodations/:id', async (req, res) => {
                 rules: hotel.rules || [],
                 images: hotel.images,
                 inventory: hotel.inventory,
+                managerId: hotel.managerId || null,
             },
             roomsData: rooms
         });
@@ -157,7 +175,7 @@ router.get('/accommodations/:id', async (req, res) => {
 });
 
 // UPDATE Accommodation
-router.put('/accommodations/:id', async (req, res) => {
+router.put('/accommodations/:id', ...requireProperties, async (req, res) => {
     try {
         const { propertyData, roomsData } = req.body;
 
@@ -168,7 +186,11 @@ router.put('/accommodations/:id', async (req, res) => {
         const hotel = await Hotel.findById(req.params.id);
         if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
 
-        // Re-calculate amenities
+        const allowed = await assertManagerOwnsHotel(req.authUser, hotel._id.toString());
+        if (!allowed) {
+            return res.status(403).json({ message: 'Access denied' });
+        }
+
         const propertyAmenities = propertyData.amenities || [];
         const roomAmenities = (roomsData || []).reduce((acc, room) => [...acc, ...(room.amenities || [])], []);
         const combinedAmenities = [...new Set([...propertyAmenities, ...roomAmenities])];
@@ -176,18 +198,21 @@ router.put('/accommodations/:id', async (req, res) => {
         propertyData.amenities = combinedAmenities;
         propertyData.location = propertyData.location || propertyData.address || hotel.location;
 
-        // Update hotel Document
+        if (req.authUser.role === 'manager') {
+            propertyData.managerId = hotel.managerId;
+        } else if (req.authUser.role === 'admin' && propertyData.managerId !== undefined) {
+            propertyData.managerId = propertyData.managerId && mongoose.Types.ObjectId.isValid(propertyData.managerId)
+                ? new mongoose.Types.ObjectId(propertyData.managerId)
+                : null;
+        }
+
         const updatedHotel = await Hotel.findByIdAndUpdate(req.params.id, propertyData, { new: true });
 
-        // Handle rooms - easiest way: Delete existing and add new if roomsData provided
         if (roomsData) {
             await Room.deleteMany({ hotelId: updatedHotel._id });
             for (const roomItem of roomsData) {
-                const roomData = {
-                    ...roomItem,
-                    hotelId: updatedHotel._id,
-                };
-                delete roomData._id; // Remove old IDs of updated
+                const roomData = { ...roomItem, hotelId: updatedHotel._id };
+                delete roomData._id;
                 const room = new Room(roomData);
                 await room.save();
             }
@@ -201,10 +226,15 @@ router.put('/accommodations/:id', async (req, res) => {
 });
 
 // DELETE Accommodation
-router.delete('/accommodations/:id', async (req, res) => {
+router.delete('/accommodations/:id', ...requireProperties, async (req, res) => {
     try {
         const hotel = await Hotel.findById(req.params.id);
         if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+
+        const allowed = await assertManagerOwnsHotel(req.authUser, hotel._id.toString());
+        if (!allowed) {
+            return res.status(403).json({ message: 'Access denied' });
+        }
 
         await Room.deleteMany({ hotelId: hotel._id });
         await Hotel.findByIdAndDelete(req.params.id);
@@ -216,8 +246,26 @@ router.delete('/accommodations/:id', async (req, res) => {
     }
 });
 
-// Additional info routes required by frontend
-router.get('/users', (req, res) => res.json([]));
-router.get('/cities', (req, res) => res.json([]));
+// Managers list for assigning properties (admin only — others get [])
+router.get('/users', requireAuth, async (req, res) => {
+    try {
+        if (req.authUser.role !== 'admin') {
+            return res.json([]);
+        }
+        const users = await User.find({ role: { $in: ['manager', 'admin'] } })
+            .select('name email role _id')
+            .lean();
+        res.json(users.map((u) => ({
+            id: u._id,
+            name: u.name,
+            email: u.email,
+            role: u.role,
+        })));
+    } catch (e) {
+        res.status(500).json({ message: e.message });
+    }
+});
+
+router.get('/cities', requireAuth, requireModuleAccess('cities'), (req, res) => res.json([]));
 
 module.exports = router;

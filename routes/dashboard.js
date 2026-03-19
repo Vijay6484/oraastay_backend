@@ -6,29 +6,43 @@ const PackageBooking = require('../models/PackageBooking');
 const Hotel = require('../models/Hotel');
 const Package = require('../models/Package');
 const Cab = require('../models/Cab');
-const Activity = require('../models/Activity');
 const Gallery = require('../models/Gallery');
+const {
+    requireAuth,
+    requireDashboardAccess,
+    getManagerHotelIds,
+} = require('../middleware/auth');
 
 // GET dashboard stats
-router.get('/stats', async (req, res) => {
+router.get('/stats', requireAuth, requireDashboardAccess, async (req, res) => {
     try {
+        const isManager = req.authUser.role === 'manager';
+        let roomMatch = {};
+        if (isManager) {
+            const ids = await getManagerHotelIds(req.authUser.id);
+            roomMatch = { hotelId: { $in: ids } };
+        }
+
         const [roomCount, cabCount, packageCount] = await Promise.all([
-            RoomBooking.countDocuments(),
-            CabBooking.countDocuments(),
-            PackageBooking.countDocuments()
+            RoomBooking.countDocuments(roomMatch),
+            isManager ? Promise.resolve(0) : CabBooking.countDocuments(),
+            isManager ? Promise.resolve(0) : PackageBooking.countDocuments()
         ]);
         const totalBookings = roomCount + cabCount + packageCount;
 
         const [roomRevenue, cabRevenue, packageRevenue] = await Promise.all([
-            RoomBooking.aggregate([{ $group: { _id: null, total: { $sum: '$totalAmount' } } }]),
-            CabBooking.aggregate([{ $group: { _id: null, total: { $sum: '$amount' } } }]),
-            PackageBooking.aggregate([{ $group: { _id: null, total: { $sum: '$amount' } } }])
+            RoomBooking.aggregate([
+                ...(Object.keys(roomMatch).length ? [{ $match: roomMatch }] : []),
+                { $group: { _id: null, total: { $sum: '$totalAmount' } } }
+            ]),
+            isManager ? Promise.resolve([]) : CabBooking.aggregate([{ $group: { _id: null, total: { $sum: '$amount' } } }]),
+            isManager ? Promise.resolve([]) : PackageBooking.aggregate([{ $group: { _id: null, total: { $sum: '$amount' } } }])
         ]);
 
         const revenue = (roomRevenue[0]?.total || 0) + (cabRevenue[0]?.total || 0) + (packageRevenue[0]?.total || 0);
 
-        // Occupancy: simplified - count confirmed room bookings vs total room nights (placeholder)
-        const confirmedRoomBookings = await RoomBooking.countDocuments({ status: 'Confirmed' });
+        const confirmedMatch = { status: 'Confirmed', ...roomMatch };
+        const confirmedRoomBookings = await RoomBooking.countDocuments(confirmedMatch);
         const occupancyRate = totalBookings > 0
             ? Math.min(100, Math.round((confirmedRoomBookings / totalBookings) * 100))
             : 0;
@@ -50,18 +64,28 @@ router.get('/stats', async (req, res) => {
 });
 
 // GET quick stats
-router.get('/quick-stats', async (req, res) => {
+router.get('/quick-stats', requireAuth, requireDashboardAccess, async (req, res) => {
     try {
         const today = new Date().toISOString().split('T')[0];
+        const isManager = req.authUser.role === 'manager';
+
+        let roomMatchToday = { checkInDate: today };
+        let accCountQuery = {};
+
+        if (isManager) {
+            const ids = await getManagerHotelIds(req.authUser.id);
+            roomMatchToday.hotelId = { $in: ids };
+            accCountQuery = { _id: { $in: ids } };
+        }
 
         const [accommodations, gallery, packages, cabs, todayRoom, todayCab, todayPackage] = await Promise.all([
-            Hotel.countDocuments(),
-            Gallery.countDocuments(),
-            Package.countDocuments(),
-            Cab.countDocuments(),
-            RoomBooking.countDocuments({ checkInDate: today }),
-            CabBooking.countDocuments({ date: today }),
-            PackageBooking.countDocuments({ checkInDate: today })
+            Hotel.countDocuments(accCountQuery),
+            isManager ? Promise.resolve(0) : Gallery.countDocuments(),
+            isManager ? Promise.resolve(0) : Package.countDocuments(),
+            isManager ? Promise.resolve(0) : Cab.countDocuments(),
+            RoomBooking.countDocuments(roomMatchToday),
+            isManager ? Promise.resolve(0) : CabBooking.countDocuments({ date: today }),
+            isManager ? Promise.resolve(0) : PackageBooking.countDocuments({ checkInDate: today })
         ]);
 
         const todayBookings = todayRoom + todayCab + todayPackage;
@@ -80,12 +104,19 @@ router.get('/quick-stats', async (req, res) => {
 });
 
 // GET recent bookings (combined room, cab, package)
-router.get('/recent-bookings', async (req, res) => {
+router.get('/recent-bookings', requireAuth, requireDashboardAccess, async (req, res) => {
     try {
+        const isManager = req.authUser.role === 'manager';
+        let roomQuery = {};
+        if (isManager) {
+            const ids = await getManagerHotelIds(req.authUser.id);
+            roomQuery = { hotelId: { $in: ids } };
+        }
+
         const [roomBookings, cabBookings, packageBookings] = await Promise.all([
-            RoomBooking.find().sort({ createdAt: -1 }).limit(5).populate('hotelId', 'name'),
-            CabBooking.find().sort({ createdAt: -1 }).limit(5),
-            PackageBooking.find().sort({ createdAt: -1 }).limit(5)
+            RoomBooking.find(roomQuery).sort({ createdAt: -1 }).limit(5).populate('hotelId', 'name'),
+            isManager ? Promise.resolve([]) : CabBooking.find().sort({ createdAt: -1 }).limit(5),
+            isManager ? Promise.resolve([]) : PackageBooking.find().sort({ createdAt: -1 }).limit(5)
         ]);
 
         const mapRoom = (b) => ({

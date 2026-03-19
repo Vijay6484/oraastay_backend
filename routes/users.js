@@ -2,18 +2,20 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 
-// GET all users (needed by AuthContext.tsx for login mapping)
+/**
+ * Legacy listing — passwords are never returned. Prefer POST /api/auth/login for authentication.
+ */
 router.get('/', async (req, res) => {
     try {
-        const users = await User.find();
-        // Return .id property mapping for AuthContext
-        res.json(users.map(u => ({
+        const users = await User.find().select('-password').lean();
+        res.json(users.map((u) => ({
             id: u._id,
             name: u.name,
             email: u.email,
             phoneNumber: u.phoneNumber,
-            password: u.password,
-            role: u.role
+            role: u.role,
+            status: u.status,
+            permissions: u.permissions || [],
         })));
     } catch (err) {
         res.status(500).json({ message: err.message });

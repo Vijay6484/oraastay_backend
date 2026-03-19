@@ -1,18 +1,29 @@
 const express = require('express');
 const router = express.Router();
 const RoomBooking = require('../models/RoomBooking');
+const {
+    requireAuth,
+    requireModuleAccess,
+    assertManagerOwnsHotel,
+} = require('../middleware/auth');
+
+router.use(requireAuth, requireModuleAccess('bookings'));
 
 // Get all bookings formatted for Admin Panel
 router.get('/', async (req, res) => {
     try {
         const query = {};
 
-        // Pagination setup
+        if (req.authUser.role === 'manager') {
+            const Hotel = require('../models/Hotel');
+            const ids = await Hotel.find({ managerId: req.authUser.id }).distinct('_id');
+            query.hotelId = { $in: ids };
+        }
+
         const page = parseInt(req.query.page) || 1;
         const limit = parseInt(req.query.limit) || 20;
         const skip = (page - 1) * limit;
 
-        // Apply filters
         if (req.query.status) {
             query.status = new RegExp(req.query.status, 'i');
         }
@@ -33,10 +44,6 @@ router.get('/', async (req, res) => {
                 { guestEmail: searchRegex },
                 { guestPhone: searchRegex }
             ];
-            // If search is a booking ID format BK-0001
-            if (req.query.search.startsWith('BK-') && !isNaN(req.query.search.split('-')[1])) {
-                query._id = req.query.search.split('-')[1]; // This won't work perfectly for Mongo ObjectIDs.
-            }
         }
 
         const rawBookings = await RoomBooking.find(query)
@@ -47,16 +54,12 @@ router.get('/', async (req, res) => {
 
         const total = await RoomBooking.countDocuments(query);
 
-        // Map them to the Admin Panel's ApiBooking interface
         const formattedData = rawBookings.map((b) => {
-            // Attempt to derive an integer ID from Mongo's _id (e.g. hash it or use a subset)
-            // Just extracting the last 6 hex chars and converting to int as a placeholder
-            // A better approach is usually an auto-incrementing field in DB, but since it doesn't exist, we spoof it:
             const numericId = parseInt(b._id.toString().substring(18), 16) || 1;
 
             return {
                 id: numericId,
-                _id: b._id, // Keep the real ID just in case
+                _id: b._id,
                 guest_name: b.guestName,
                 guest_email: b.guestEmail,
                 guest_phone: b.guestPhone,
@@ -94,7 +97,6 @@ router.get('/', async (req, res) => {
     }
 });
 
-// GET room occupancy for a specific date and accommodation (and optionally room_id)
 router.get('/room-occupancy', async (req, res) => {
     try {
         const { check_in, id, room_id } = req.query;
@@ -102,15 +104,17 @@ router.get('/room-occupancy', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Missing check_in or id' });
         }
 
+        const allowed = await assertManagerOwnsHotel(req.authUser, id);
+        if (!allowed) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+
         const query = {
             hotelId: id,
-            status: { $in: ['Pending', 'Confirmed'] }
+            status: { $in: ['Pending', 'Confirmed'] },
+            checkInDate: { $lte: check_in },
+            checkOutDate: { $gt: check_in }
         };
-
-        // Bookings that overlap with the check_in date
-        // Note: A booking blocks the room for the night of check-in, up to the night before check-out
-        query.checkInDate = { $lte: check_in };
-        query.checkOutDate = { $gt: check_in };
 
         if (room_id) {
             query.roomId = room_id;
@@ -126,7 +130,6 @@ router.get('/room-occupancy', async (req, res) => {
     }
 });
 
-// POST create "offline" booking from Admin Panel
 router.post('/offline', async (req, res) => {
     try {
         const {
@@ -138,11 +141,14 @@ router.post('/offline', async (req, res) => {
             total_amount, advance_amount, payment_method
         } = req.body;
 
-        // Note: Room is optional if creating accommodation-level booking, but Mongoose requires it.
-        // If room_id is empty, use accommodation_id as a fallback or assign null
+        const allowed = await assertManagerOwnsHotel(req.authUser, accommodation_id);
+        if (!allowed) {
+            return res.status(403).json({ success: false, message: 'Access denied for this property' });
+        }
+
         const booking = new RoomBooking({
             hotelId: accommodation_id,
-            roomId: room_id || accommodation_id, // fallback if roomId is not provided
+            roomId: room_id || accommodation_id,
             guestName: guest_name,
             guestEmail: guest_email,
             guestPhone: guest_phone || '',
@@ -158,7 +164,7 @@ router.post('/offline', async (req, res) => {
             foodVeg: food_veg || 0,
             foodNonVeg: food_nonveg || 0,
             foodJain: food_jain || 0,
-            status: 'Confirmed', // typically confirmed if admin creates it
+            status: 'Confirmed',
             paymentStatus: advance_amount > 0 ? (advance_amount >= total_amount ? 'success' : 'partial') : 'pending'
         });
 
@@ -180,16 +186,17 @@ router.post('/offline', async (req, res) => {
 router.delete('/delete/:id', async (req, res) => {
     try {
         const { id } = req.params;
-        // Since Admin Panel passes `id` which is our Spoofed numeric ID, we might have an issue. 
-        // We should ensure Bookings.tsx tries to use `_id` where possible, or we delete by _id if passed.
-        // Wait, Bookings.tsx uses `booking.id`. We can modify Bookings.tsx to keep the original ObjectId.
-
-        let deletedBooking = await RoomBooking.findByIdAndDelete(id);
-
-        if (!deletedBooking) {
-            // fallback if it's not objectId
+        const booking = await RoomBooking.findById(id);
+        if (!booking) {
             return res.status(404).json({ success: false, message: 'Booking not found' });
         }
+
+        const allowed = await assertManagerOwnsHotel(req.authUser, booking.hotelId.toString());
+        if (!allowed) {
+            return res.status(403).json({ success: false, message: 'Access denied' });
+        }
+
+        await RoomBooking.findByIdAndDelete(id);
         res.json({ success: true, message: 'Booking deleted successfully' });
     } catch (err) {
         console.error(err);

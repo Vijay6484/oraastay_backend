@@ -56,7 +56,9 @@ const calendarRoutes = require('./routes/calendar'); // NEW
 const adminBookingsRoutes = require('./routes/bookings');
 const packageBookingRoutes = require('./routes/packageBookings');
 const ratingRoutes = require('./routes/ratings'); // NEW
-const userRoutes = require('./routes/users'); // Admin Auth
+const userRoutes = require('./routes/users'); // Legacy user listing (no passwords)
+const authRoutes = require('./routes/auth');
+const adminUsersRoutes = require('./routes/adminUsers');
 const travelGuideRoutes = require('./routes/travelGuide');
 const paymentRoutes = require('./routes/payments');
 const couponRoutes = require('./routes/coupons');
@@ -81,6 +83,8 @@ app.use('/api/admin/calendar', calendarRoutes);
 app.use('/api/bookings', adminBookingsRoutes);
 app.use('/api/package-bookings', packageBookingRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/admin/users', adminUsersRoutes);
 app.use('/api/travel-guide', travelGuideRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/admin/coupons', couponRoutes);

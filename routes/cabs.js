@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Cab = require('../models/Cab');
+const { requireAuth, requireModuleAccess } = require('../middleware/auth');
+const requireCabsWrite = [requireAuth, requireModuleAccess('cabs')];
 
 // Get all cabs
 router.get('/', async (req, res) => {
@@ -13,7 +15,7 @@ router.get('/', async (req, res) => {
 });
 
 // Create cab
-router.post('/', async (req, res) => {
+router.post('/', ...requireCabsWrite, async (req, res) => {
     const newCab = new Cab(req.body);
     try {
         const savedCab = await newCab.save();
@@ -24,7 +26,7 @@ router.post('/', async (req, res) => {
 });
 
 // Update cab
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', ...requireCabsWrite, async (req, res) => {
     try {
         const updatedCab = await Cab.findByIdAndUpdate(req.params.id, req.body, { new: true });
         res.json(updatedCab);
@@ -34,7 +36,7 @@ router.patch('/:id', async (req, res) => {
 });
 
 // Delete cab
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', ...requireCabsWrite, async (req, res) => {
     try {
         await Cab.findByIdAndDelete(req.params.id);
         res.json({ message: 'Cab deleted' });

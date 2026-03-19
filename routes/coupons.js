@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
 const Coupon = require('../models/Coupon');
+const { requireAuth, requireModuleAccess } = require('../middleware/auth');
+
+router.use(requireAuth, requireModuleAccess('coupons'));
 
 const formatCoupon = (c) => ({
     id: c._id,

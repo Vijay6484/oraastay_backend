@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const Amenity = require('../models/Amenity');
+const { requireAuth, requireModuleAccess } = require('../middleware/auth');
+const requireAmenities = [requireAuth, requireModuleAccess('amenities')];
 
 // Public: list active amenities (for property form, website)
 router.get('/amenities', async (req, res) => {
@@ -18,7 +20,7 @@ router.get('/amenities', async (req, res) => {
 });
 
 // Admin: list all amenities
-router.get('/admin/amenities', async (req, res) => {
+router.get('/admin/amenities', ...requireAmenities, async (req, res) => {
     try {
         const items = await Amenity.find().sort({ name: 1 }).lean();
         res.json(items.map((r) => ({
@@ -33,7 +35,7 @@ router.get('/admin/amenities', async (req, res) => {
 });
 
 // Admin: create amenity
-router.post('/admin/amenities', async (req, res) => {
+router.post('/admin/amenities', ...requireAmenities, async (req, res) => {
     try {
         const { name, icon, active } = req.body;
         if (!name || !name.trim()) return res.status(400).json({ message: 'Name is required' });
@@ -55,7 +57,7 @@ router.post('/admin/amenities', async (req, res) => {
 });
 
 // Admin: update amenity
-router.put('/admin/amenities/:id', async (req, res) => {
+router.put('/admin/amenities/:id', ...requireAmenities, async (req, res) => {
     try {
         const { name, icon, active } = req.body;
         const update = {};
@@ -76,7 +78,7 @@ router.put('/admin/amenities/:id', async (req, res) => {
 });
 
 // Admin: delete amenity
-router.delete('/admin/amenities/:id', async (req, res) => {
+router.delete('/admin/amenities/:id', ...requireAmenities, async (req, res) => {
     try {
         const doc = await Amenity.findByIdAndDelete(req.params.id);
         if (!doc) return res.status(404).json({ message: 'Amenity not found' });

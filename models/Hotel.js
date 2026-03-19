@@ -42,7 +42,8 @@ const HotelSchema = new mongoose.Schema({
     },
     inventory: { type: Number, default: 5 }, // Available rooms/units
     description: { type: String },
-    rules: [{ type: String }]
+    rules: [{ type: String }],
+    managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
 }, { timestamps: true });
 
 module.exports = mongoose.model('Hotel', HotelSchema);

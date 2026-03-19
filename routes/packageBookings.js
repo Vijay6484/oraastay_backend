@@ -1,9 +1,11 @@
 const express = require('express');
 const router = express.Router();
 const PackageBooking = require('../models/PackageBooking');
+const { requireAuth, requireModuleAccess } = require('../middleware/auth');
+const requirePkgBookingsAdmin = [requireAuth, requireModuleAccess('package_bookings')];
 
 // Get all package bookings
-router.get('/', async (req, res) => {
+router.get('/', ...requirePkgBookingsAdmin, async (req, res) => {
     try {
         const bookings = await PackageBooking.find().sort({ createdAt: -1 });
         res.json({ success: true, data: bookings });
@@ -55,7 +57,7 @@ router.post('/', async (req, res) => {
 });
 
 // Update booking status
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', ...requirePkgBookingsAdmin, async (req, res) => {
     try {
         const { status } = req.body;
         if (!['Pending', 'Confirmed', 'Cancelled'].includes(status)) {
@@ -74,7 +76,7 @@ router.patch('/:id/status', async (req, res) => {
 });
 
 // Delete a booking
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', ...requirePkgBookingsAdmin, async (req, res) => {
     try {
         await PackageBooking.findByIdAndDelete(req.params.id);
         res.json({ success: true, message: 'Booking deleted' });
