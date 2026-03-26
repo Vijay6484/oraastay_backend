@@ -37,7 +37,19 @@ router.get('/:id', async (req, res) => {
 
 // Create package
 router.post('/', ...requirePackagesAdmin, async (req, res) => {
-    const newPackage = new Package(req.body);
+    const data = { ...req.body };
+    // Handle empty subcategory violating enum
+    if (!data.subcategory) {
+        delete data.subcategory;
+    }
+    // Generate slug from title if missing
+    if (!data.slug && data.title) {
+        const baseSlug = data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+        // Append a random hash to ensure uniqueness
+        data.slug = `${baseSlug}-${Math.random().toString(36).substring(2, 8)}`;
+    }
+
+    const newPackage = new Package(data);
     try {
         const savedPackage = await newPackage.save();
         res.status(201).json(savedPackage);
@@ -49,7 +61,15 @@ router.post('/', ...requirePackagesAdmin, async (req, res) => {
 // Update package
 router.patch('/:id', ...requirePackagesAdmin, async (req, res) => {
     try {
-        const updatedPackage = await Package.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        const updateData = { ...req.body };
+        const query = { $set: updateData };
+
+        if (updateData.hasOwnProperty('subcategory') && !updateData.subcategory) {
+            delete updateData.subcategory;
+            query.$unset = { subcategory: 1 };
+        }
+
+        const updatedPackage = await Package.findByIdAndUpdate(req.params.id, query, { new: true });
         if (!updatedPackage) return res.status(404).json({ message: 'Package not found' });
         res.json(updatedPackage);
     } catch (err) {

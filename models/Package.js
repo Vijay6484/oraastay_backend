@@ -21,6 +21,7 @@ const PackageSchema = new mongoose.Schema({
             'Honeymoon Packages',
             'Family Tour Packages',
             'Weekend Packages',
+            'Group & Special Packages',
             'Tour Package from Mumbai',
             'Tour Package from Pune'
         ]
