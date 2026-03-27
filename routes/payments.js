@@ -3,7 +3,12 @@ const router = express.Router();
 const CabBooking = require('../models/CabBooking');
 const RoomBooking = require('../models/RoomBooking');
 const PackageBooking = require('../models/PackageBooking');
-const { createPaymentParams, getPaymentFormHtml, isPayUConfigured } = require('../services/paymentService');
+const {
+    createPaymentParams,
+    getPaymentFormHtml,
+    isPayUConfigured,
+    verifyPayUReverseHash,
+} = require('../services/paymentService');
 const { getRoomAvailability } = require('../services/roomAvailability');
 const {
     sendCabBookingConfirmation,
@@ -13,6 +18,9 @@ const {
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://oraastay.com';
 const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+
+/** PayU redirects with POST (form body); some clients may use GET — merge both. */
+const payuCallbackParams = (req) => ({ ...req.query, ...req.body });
 
 // Initiate cab payment
 router.post('/initiate/cab', async (req, res) => {
@@ -185,9 +193,8 @@ router.post('/initiate/package', async (req, res) => {
     }
 });
 
-// PayU success callback - PayU redirects user here with GET params
-router.get('/callback/success', async (req, res) => {
-    const params = req.query;
+const handleSuccessCallback = async (req, res) => {
+    const params = payuCallbackParams(req);
     const bookingType = params.udf1;
     const bookingId = params.udf2;
     const status = params.status;
@@ -196,47 +203,61 @@ router.get('/callback/success', async (req, res) => {
         return res.redirect(`${FRONTEND_URL}/payment/failure?reason=invalid`);
     }
 
+    if (!verifyPayUReverseHash(params)) {
+        console.error('PayU reverse hash verification failed for txn:', params.txnid);
+        return res.redirect(`${FRONTEND_URL}/payment/failure?reason=hash_mismatch`);
+    }
+
+    const payRef = params.mihpayid || params.txnid || '';
+
     try {
         if (bookingType === 'cab') {
             const booking = await CabBooking.findByIdAndUpdate(
                 bookingId,
-                { status: 'Confirmed', paymentStatus: 'success', paymentTxnId: params.mihpayid || params.txnid },
+                { status: 'Confirmed', paymentStatus: 'success', paymentTxnId: payRef },
                 { new: true }
             );
             if (booking && booking.guestEmail) {
-                await sendCabBookingConfirmation(booking);
+                await sendCabBookingConfirmation(booking, { paymentRef: payRef, payuMode: params.mode });
             }
         } else if (bookingType === 'hotel') {
             const booking = await RoomBooking.findByIdAndUpdate(
                 bookingId,
-                { status: 'Confirmed', paymentStatus: 'success', paymentTxnId: params.mihpayid || params.txnid },
+                { status: 'Confirmed', paymentStatus: 'success', paymentTxnId: payRef },
                 { new: true }
             ).populate('roomId').populate('hotelId');
             if (booking && booking.guestEmail) {
-                await sendHotelBookingConfirmation(booking, booking.roomId, booking.hotelId);
+                await sendHotelBookingConfirmation(booking, booking.roomId, booking.hotelId, { paymentRef: payRef, payuMode: params.mode });
             }
         } else if (bookingType === 'package') {
             const booking = await PackageBooking.findByIdAndUpdate(
                 bookingId,
-                { status: 'Confirmed', paymentStatus: 'success', paymentTxnId: params.mihpayid || params.txnid },
+                { status: 'Confirmed', paymentStatus: 'success', paymentTxnId: payRef },
                 { new: true }
             );
             if (booking && booking.primaryGuestEmail) {
-                await sendPackageBookingConfirmation(booking);
+                await sendPackageBookingConfirmation(booking, { paymentRef: payRef, payuMode: params.mode });
             }
         }
     } catch (err) {
         console.error('Callback success handler error:', err);
     }
-    res.redirect(`${FRONTEND_URL}/payment/success?type=${bookingType}&id=${bookingId}`);
-});
+    res.redirect(`${FRONTEND_URL}/payment/success?type=${encodeURIComponent(bookingType)}&id=${encodeURIComponent(bookingId)}`);
+};
 
-// PayU failure callback
-router.get('/callback/failure', async (req, res) => {
-    const params = req.query;
+// PayU success — browser POSTs form fields to surl (GET supported for testing)
+router.get('/callback/success', handleSuccessCallback);
+router.post('/callback/success', handleSuccessCallback);
+
+const handleFailureCallback = (req, res) => {
+    const params = payuCallbackParams(req);
     const bookingType = params.udf1 || '';
     const bookingId = params.udf2 || '';
-    res.redirect(`${FRONTEND_URL}/payment/failure?type=${bookingType}&id=${bookingId}&reason=${params.error_Message || 'payment_failed'}`);
-});
+    const reason = params.error_Message || params.error || params.unmappedstatus || 'payment_failed';
+    res.redirect(`${FRONTEND_URL}/payment/failure?type=${encodeURIComponent(bookingType)}&id=${encodeURIComponent(bookingId)}&reason=${encodeURIComponent(String(reason))}`);
+};
+
+router.get('/callback/failure', handleFailureCallback);
+router.post('/callback/failure', handleFailureCallback);
 
 module.exports = router;

@@ -21,6 +21,35 @@ const initTransporter = () => {
     return transporter;
 };
 
+const escapeHtml = (s) => {
+    if (s == null || s === '') return '';
+    return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+};
+
+const baseStyles = `
+  body { font-family: Georgia, 'Times New Roman', serif; line-height: 1.55; color: #1a202c; margin: 0; padding: 0; background: #edf2f7; }
+  .wrap { max-width: 640px; margin: 0 auto; padding: 24px 16px 40px; }
+  .card { background: #fff; border-radius: 10px; box-shadow: 0 4px 24px rgba(15, 23, 42, 0.08); overflow: hidden; }
+  .head { background: linear-gradient(135deg, #1a365d 0%, #2c5282 100%); color: #fff; padding: 28px 24px; }
+  .head h1 { margin: 0 0 8px; font-size: 22px; font-weight: 600; }
+  .head p { margin: 0; opacity: 0.92; font-size: 14px; }
+  .body { padding: 24px; }
+  .section { margin-top: 20px; }
+  .section h2 { font-size: 13px; text-transform: uppercase; letter-spacing: 0.06em; color: #718096; margin: 0 0 10px; font-weight: 600; }
+  table.rows { width: 100%; border-collapse: collapse; font-size: 14px; }
+  table.rows td { padding: 10px 0; border-bottom: 1px solid #e2e8f0; vertical-align: top; }
+  table.rows td.label { color: #4a5568; width: 42%; font-weight: 600; }
+  table.rows tr:last-child td { border-bottom: none; }
+  .guest-table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  .guest-table th, .guest-table td { padding: 8px 10px; text-align: left; border: 1px solid #e2e8f0; }
+  .guest-table th { background: #f7fafc; color: #4a5568; font-weight: 600; }
+  .foot { padding: 16px 24px 24px; font-size: 12px; color: #718096; border-top: 1px solid #e2e8f0; }
+`;
+
 const sendEmail = async ({ to, subject, html }) => {
     const transport = initTransporter();
     if (!transport) return { sent: false, error: 'SMTP not configured' };
@@ -38,80 +67,180 @@ const sendEmail = async ({ to, subject, html }) => {
     }
 };
 
-const sendCabBookingConfirmation = async (booking) => {
-    const html = `
-<!DOCTYPE html>
+const sendCabBookingConfirmation = async (booking, meta = {}) => {
+    const { paymentRef = '', payuMode = '' } = meta;
+    const html = `<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;} h1{color:#1a365d;} .detail{background:#f7fafc;padding:12px;margin:8px 0;border-radius:6px;} .label{font-weight:bold;color:#4a5568;}</style></head>
+<head><meta charset="utf-8"><style>${baseStyles}</style></head>
 <body>
-<h1>Cab Booking Confirmed</h1>
-<p>Dear ${booking.guestName},</p>
-<p>Your cab booking has been confirmed. Here are the details:</p>
-<div class="detail"><span class="label">Booking ID:</span> ${booking._id}</div>
-<div class="detail"><span class="label">Trip Type:</span> ${booking.tripType}</div>
-<div class="detail"><span class="label">Pickup:</span> ${booking.pickup}</div>
-<div class="detail"><span class="label">Drop:</span> ${booking.drop}</div>
-<div class="detail"><span class="label">Date:</span> ${booking.date}</div>
-<div class="detail"><span class="label">Time:</span> ${booking.time}</div>
-<div class="detail"><span class="label">Vehicle:</span> ${booking.vehicle}</div>
-<div class="detail"><span class="label">Amount Paid:</span> ₹${booking.amount || 0}</div>
-<p>Thank you for choosing us. For any queries, please contact us.</p>
+<div class="wrap">
+  <div class="card">
+    <div class="head">
+      <h1>Cab booking confirmed</h1>
+      <p>Thank you — your payment was received.</p>
+    </div>
+    <div class="body">
+      <p style="margin:0 0 16px;font-size:15px;">Dear ${escapeHtml(booking.guestName)},</p>
+      <p style="margin:0 0 20px;color:#4a5568;">Your cab booking is confirmed. Summary below.</p>
+      <div class="section">
+        <h2>Trip & vehicle</h2>
+        <table class="rows">
+          <tr><td class="label">Booking reference</td><td>${escapeHtml(String(booking._id))}</td></tr>
+          <tr><td class="label">Payment / PayU ref</td><td>${escapeHtml(paymentRef || '—')}</td></tr>
+          ${payuMode ? `<tr><td class="label">Payment mode</td><td>${escapeHtml(payuMode)}</td></tr>` : ''}
+          <tr><td class="label">Trip type</td><td>${escapeHtml(booking.tripType)}</td></tr>
+          <tr><td class="label">Pickup</td><td>${escapeHtml(booking.pickup)}</td></tr>
+          <tr><td class="label">Drop</td><td>${escapeHtml(booking.drop)}</td></tr>
+          <tr><td class="label">Date</td><td>${escapeHtml(booking.date)}</td></tr>
+          <tr><td class="label">Time</td><td>${escapeHtml(booking.time)}</td></tr>
+          <tr><td class="label">Vehicle preference</td><td>${escapeHtml(booking.vehicle)}</td></tr>
+        </table>
+      </div>
+      <div class="section">
+        <h2>Your contact</h2>
+        <table class="rows">
+          <tr><td class="label">Phone</td><td>${escapeHtml(booking.guestPhone)}</td></tr>
+          <tr><td class="label">Email</td><td>${escapeHtml(booking.guestEmail || '—')}</td></tr>
+          <tr><td class="label">Amount paid</td><td>₹${escapeHtml(String(booking.amount ?? 0))}</td></tr>
+        </table>
+      </div>
+    </div>
+    <div class="foot">Questions? Reply to this email or call us. We look forward to hosting you.</div>
+  </div>
+</div>
 </body>
 </html>`;
     if (!booking.guestEmail) return { sent: false, error: 'No email provided' };
     return sendEmail({
         to: booking.guestEmail,
-        subject: `Cab Booking Confirmed - ${booking._id}`,
+        subject: `Cab confirmed — ${booking._id}`,
         html,
     });
 };
 
-const sendHotelBookingConfirmation = async (booking, room, hotel) => {
-    const html = `
-<!DOCTYPE html>
+const sendHotelBookingConfirmation = async (booking, room, hotel, meta = {}) => {
+    const { paymentRef = '', payuMode = '' } = meta;
+    const g = booking.guests || {};
+    const html = `<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;} h1{color:#1a365d;} .detail{background:#f7fafc;padding:12px;margin:8px 0;border-radius:6px;} .label{font-weight:bold;color:#4a5568;}</style></head>
+<head><meta charset="utf-8"><style>${baseStyles}</style></head>
 <body>
-<h1>Hotel Booking Confirmed</h1>
-<p>Dear ${booking.guestName},</p>
-<p>Your room booking has been confirmed. Here are the details:</p>
-<div class="detail"><span class="label">Booking ID:</span> ${booking._id}</div>
-<div class="detail"><span class="label">Hotel:</span> ${hotel?.name || 'N/A'}</div>
-<div class="detail"><span class="label">Room:</span> ${room?.name || 'N/A'}</div>
-<div class="detail"><span class="label">Check-in:</span> ${booking.checkInDate}</div>
-<div class="detail"><span class="label">Check-out:</span> ${booking.checkOutDate}</div>
-<div class="detail"><span class="label">Guests:</span> ${booking.guests?.adults || 0} Adults, ${booking.guests?.children || 0} Children, ${booking.guests?.rooms || 1} Room(s)</div>
-<div class="detail"><span class="label">Total Amount:</span> ₹${booking.totalAmount || 0}</div>
-<p>Thank you for choosing us. For any queries, please contact us.</p>
+<div class="wrap">
+  <div class="card">
+    <div class="head">
+      <h1>Hotel booking confirmed</h1>
+      <p>Your stay is confirmed — details inside.</p>
+    </div>
+    <div class="body">
+      <p style="margin:0 0 16px;font-size:15px;">Dear ${escapeHtml(booking.guestName)},</p>
+      <p style="margin:0 0 20px;color:#4a5568;">Thank you for booking with us. Here is your reservation summary.</p>
+      <div class="section">
+        <h2>Property & room</h2>
+        <table class="rows">
+          <tr><td class="label">Booking reference</td><td>${escapeHtml(String(booking._id))}</td></tr>
+          <tr><td class="label">Payment / PayU ref</td><td>${escapeHtml(paymentRef || '—')}</td></tr>
+          ${payuMode ? `<tr><td class="label">Payment mode</td><td>${escapeHtml(payuMode)}</td></tr>` : ''}
+          <tr><td class="label">Hotel</td><td>${escapeHtml(hotel?.name || '—')}</td></tr>
+          <tr><td class="label">Room</td><td>${escapeHtml(room?.name || '—')}</td></tr>
+          <tr><td class="label">Check-in</td><td>${escapeHtml(booking.checkInDate)}</td></tr>
+          <tr><td class="label">Check-out</td><td>${escapeHtml(booking.checkOutDate)}</td></tr>
+        </table>
+      </div>
+      <div class="section">
+        <h2>Guests & amounts</h2>
+        <table class="rows">
+          <tr><td class="label">Adults</td><td>${escapeHtml(String(g.adults ?? 0))}</td></tr>
+          <tr><td class="label">Children</td><td>${escapeHtml(String(g.children ?? 0))}</td></tr>
+          <tr><td class="label">Rooms</td><td>${escapeHtml(String(g.rooms ?? 1))}</td></tr>
+          <tr><td class="label">Total paid</td><td>₹${escapeHtml(String(booking.totalAmount ?? 0))}</td></tr>
+          ${booking.advanceAmount ? `<tr><td class="label">Advance</td><td>₹${escapeHtml(String(booking.advanceAmount))}</td></tr>` : ''}
+        </table>
+      </div>
+      <div class="section">
+        <h2>Your contact</h2>
+        <table class="rows">
+          <tr><td class="label">Email</td><td>${escapeHtml(booking.guestEmail)}</td></tr>
+          <tr><td class="label">Phone</td><td>${escapeHtml(booking.guestPhone || '—')}</td></tr>
+        </table>
+      </div>
+      ${(booking.foodVeg || booking.foodNonVeg || booking.foodJain) ? `<div class="section"><h2>Meal preferences (counts)</h2><table class="rows">
+          <tr><td class="label">Veg</td><td>${escapeHtml(String(booking.foodVeg || 0))}</td></tr>
+          <tr><td class="label">Non-veg</td><td>${escapeHtml(String(booking.foodNonVeg || 0))}</td></tr>
+          <tr><td class="label">Jain</td><td>${escapeHtml(String(booking.foodJain || 0))}</td></tr>
+      </table></div>` : ''}
+      ${booking.specialRequests ? `<div class="section"><h2>Special requests</h2><p style="margin:0;color:#2d3748;">${escapeHtml(booking.specialRequests)}</p></div>` : ''}
+    </div>
+    <div class="foot">Need to change dates? Contact us as soon as possible. See you in Mahabaleshwar.</div>
+  </div>
+</div>
 </body>
 </html>`;
     return sendEmail({
         to: booking.guestEmail,
-        subject: `Hotel Booking Confirmed - ${booking._id}`,
+        subject: `Hotel confirmed — ${hotel?.name || 'Stay'} — ${booking._id}`,
         html,
     });
 };
 
-const sendPackageBookingConfirmation = async (booking) => {
-    const html = `
-<!DOCTYPE html>
+const sendPackageBookingConfirmation = async (booking, meta = {}) => {
+    const { paymentRef = '', payuMode = '' } = meta;
+    const guestRows = Array.isArray(booking.guests) && booking.guests.length
+        ? booking.guests.map((g, i) => `<tr>
+            <td>${i + 1}</td>
+            <td>${escapeHtml(g.name)}</td>
+            <td>${escapeHtml(g.email || '—')}</td>
+            <td>${escapeHtml(g.phone || '—')}</td>
+          </tr>`).join('')
+        : '';
+    const guestBlock = guestRows
+        ? `<div class="section"><h2>Guest list</h2>
+          <table class="guest-table"><thead><tr><th>#</th><th>Name</th><th>Email</th><th>Phone</th></tr></thead><tbody>${guestRows}</tbody></table></div>`
+        : '';
+
+    const html = `<!DOCTYPE html>
 <html>
-<head><meta charset="utf-8"><style>body{font-family:Arial,sans-serif;line-height:1.6;color:#333;max-width:600px;margin:0 auto;padding:20px;} h1{color:#1a365d;} .detail{background:#f7fafc;padding:12px;margin:8px 0;border-radius:6px;} .label{font-weight:bold;color:#4a5568;}</style></head>
+<head><meta charset="utf-8"><style>${baseStyles}</style></head>
 <body>
-<h1>Package Booking Confirmed</h1>
-<p>Dear ${booking.primaryGuestName},</p>
-<p>Your package booking has been confirmed. Here are the details:</p>
-<div class="detail"><span class="label">Booking ID:</span> ${booking._id}</div>
-<div class="detail"><span class="label">Package:</span> ${booking.packageTitle}</div>
-<div class="detail"><span class="label">Check-in Date:</span> ${booking.checkInDate}</div>
-<div class="detail"><span class="label">Guests:</span> ${booking.adults} Adults, ${booking.children} Children (Total: ${booking.totalGuests})</div>
-<div class="detail"><span class="label">Amount Paid:</span> ₹${booking.amount || 0}</div>
-<p>Thank you for choosing us. For any queries, please contact us.</p>
+<div class="wrap">
+  <div class="card">
+    <div class="head">
+      <h1>Package booking confirmed</h1>
+      <p>${escapeHtml(booking.packageTitle)}</p>
+    </div>
+    <div class="body">
+      <p style="margin:0 0 16px;font-size:15px;">Dear ${escapeHtml(booking.primaryGuestName)},</p>
+      <p style="margin:0 0 20px;color:#4a5568;">Your package is booked and paid. Details below.</p>
+      <div class="section">
+        <h2>Package & dates</h2>
+        <table class="rows">
+          <tr><td class="label">Booking reference</td><td>${escapeHtml(String(booking._id))}</td></tr>
+          <tr><td class="label">Payment / PayU ref</td><td>${escapeHtml(paymentRef || '—')}</td></tr>
+          ${payuMode ? `<tr><td class="label">Payment mode</td><td>${escapeHtml(payuMode)}</td></tr>` : ''}
+          <tr><td class="label">Package</td><td>${escapeHtml(booking.packageTitle)}</td></tr>
+          <tr><td class="label">Check-in date</td><td>${escapeHtml(booking.checkInDate)}</td></tr>
+          <tr><td class="label">Adults / children</td><td>${escapeHtml(String(booking.adults))} / ${escapeHtml(String(booking.children))}</td></tr>
+          <tr><td class="label">Total guests</td><td>${escapeHtml(String(booking.totalGuests ?? ''))}</td></tr>
+          <tr><td class="label">Amount paid</td><td>₹${escapeHtml(String(booking.amount ?? 0))}</td></tr>
+        </table>
+      </div>
+      <div class="section">
+        <h2>Primary contact</h2>
+        <table class="rows">
+          <tr><td class="label">Email</td><td>${escapeHtml(booking.primaryGuestEmail)}</td></tr>
+          <tr><td class="label">Phone</td><td>${escapeHtml(booking.primaryGuestPhone)}</td></tr>
+        </table>
+      </div>
+      ${guestBlock}
+      ${booking.notes ? `<div class="section"><h2>Notes</h2><p style="margin:0;color:#2d3748;">${escapeHtml(booking.notes)}</p></div>` : ''}
+    </div>
+    <div class="foot">We will follow up if anything else is needed. Enjoy Mahabaleshwar.</div>
+  </div>
+</div>
 </body>
 </html>`;
     return sendEmail({
         to: booking.primaryGuestEmail,
-        subject: `Package Booking Confirmed - ${booking._id}`,
+        subject: `Package confirmed — ${booking.packageTitle} — ${booking._id}`,
         html,
     });
 };

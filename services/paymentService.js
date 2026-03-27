@@ -7,30 +7,73 @@ const PAYU_ENDPOINT = PAYU_MODE === 'LIVE'
     ? 'https://secure.payu.in/_payment'
     : 'https://test.payu.in/_payment';
 
-const generateHash = (params) => {
-    const hashString = [
-        params.key,
-        params.txnid,
-        params.amount,
-        params.productinfo,
-        params.firstname,
-        params.email,
-        params.udf1 || '',
-        params.udf2 || '',
-        params.udf3 || '',
-        params.udf4 || '',
-        params.udf5 || '',
-        '', '', '', '', '', '',
-        PAYU_SALT,
-    ].join('|');
-    return crypto.createHash('sha512').update(hashString).digest('hex');
+/** PayU expects amount as a decimal string with two places (e.g. "10.00"). */
+const formatAmountForPayU = (amount) => {
+    const n = typeof amount === 'number' ? amount : parseFloat(String(amount).replace(/,/g, ''));
+    if (Number.isNaN(n)) return '0.00';
+    return n.toFixed(2);
+};
+
+/**
+ * Forward hash for hosted checkout — must match:
+ * sha512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT)
+ * (five empty segments between udf5 and salt — exactly "||||||" in the docs)
+ */
+const generatePaymentRequestHash = (params) => {
+    const key = params.key;
+    const txnid = params.txnid;
+    const amount = String(params.amount);
+    const productinfo = params.productinfo;
+    const firstname = params.firstname;
+    const email = params.email;
+    const udf1 = params.udf1 ?? '';
+    const udf2 = params.udf2 ?? '';
+    const udf3 = params.udf3 ?? '';
+    const udf4 = params.udf4 ?? '';
+    const udf5 = params.udf5 ?? '';
+    const hashString = `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|${udf1}|${udf2}|${udf3}|${udf4}|${udf5}||||||${PAYU_SALT}`;
+    return crypto.createHash('sha512').update(hashString, 'utf8').digest('hex');
+};
+
+/**
+ * Validates PayU response per docs:
+ * sha512(SALT|status||||||udf5|udf4|udf3|udf2|udf1|email|firstname|productinfo|amount|txnid|key)
+ * With additional_charges: sha512(additional_charges|SALT|status||||||...)
+ */
+const verifyPayUReverseHash = (params) => {
+    if (!PAYU_SALT) return false;
+    const received = (params.hash || '').toLowerCase();
+    if (!received) return false;
+    const salt = PAYU_SALT;
+    const status = params.status ?? '';
+    const udf5 = params.udf5 ?? '';
+    const udf4 = params.udf4 ?? '';
+    const udf3 = params.udf3 ?? '';
+    const udf2 = params.udf2 ?? '';
+    const udf1 = params.udf1 ?? '';
+    const email = params.email ?? '';
+    const firstname = params.firstname ?? '';
+    const productinfo = params.productinfo ?? '';
+    const amount = params.amount != null ? String(params.amount) : '';
+    const txnid = params.txnid ?? '';
+    const key = params.key ?? '';
+    const additionalCharges = params.additionalCharges ?? params.additional_charges ?? '';
+    let hashString;
+    if (additionalCharges) {
+        hashString = `${additionalCharges}|${salt}|${status}||||||${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
+    } else {
+        hashString = `${salt}|${status}||||||${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
+    }
+    const calculated = crypto.createHash('sha512').update(hashString, 'utf8').digest('hex');
+    return calculated === received;
 };
 
 const createPaymentParams = ({ txnId, amount, productInfo, firstName, email, phone, udf1, udf2, surl, furl }) => {
+    const amountStr = formatAmountForPayU(amount);
     const params = {
         key: PAYU_KEY,
         txnid: txnId,
-        amount: String(amount),
+        amount: amountStr,
         productinfo: productInfo,
         firstname: firstName,
         email,
@@ -43,7 +86,7 @@ const createPaymentParams = ({ txnId, amount, productInfo, firstName, email, pho
         udf4: '',
         udf5: '',
     };
-    params.hash = generateHash(params);
+    params.hash = generatePaymentRequestHash(params);
     return params;
 };
 
@@ -71,4 +114,6 @@ module.exports = {
     getPaymentFormHtml,
     isPayUConfigured,
     PAYU_ENDPOINT,
+    formatAmountForPayU,
+    verifyPayUReverseHash,
 };
