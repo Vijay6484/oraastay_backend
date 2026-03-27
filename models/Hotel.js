@@ -4,7 +4,7 @@ const HotelSchema = new mongoose.Schema({
     name: { type: String, required: true },
     slug: { type: String, required: true, unique: true },
     location: { type: String, required: true },
-    rating: { type: Number, default: 0 },
+    rating: { type: Number, default: () => Number((Math.random() * 0.4 + 4.5).toFixed(1)) },
     reviews: { type: Number, default: 0 },
     price: { type: Number, required: true },
     originalPrice: { type: Number },
