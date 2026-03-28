@@ -17,7 +17,16 @@ const {
 } = require('../services/emailService');
 
 const FRONTEND_URL = process.env.FRONTEND_URL || 'https://oraastay.com';
-const API_BASE = process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`;
+
+/**
+ * Prefix for PayU surl/furl. Routes are mounted at /api/payments, so full path is …/api/payments/callback/…
+ * Many deployments set API_BASE_URL like https://host/api (same as VITE_API_URL); appending /api again breaks callbacks.
+ */
+function payuCallbackApiPrefix() {
+    const raw = (process.env.API_BASE_URL || `http://localhost:${process.env.PORT || 5000}`).replace(/\/+$/, '');
+    return /\/api$/i.test(raw) ? raw : `${raw}/api`;
+}
+const PAYU_CALLBACK_API_PREFIX = payuCallbackApiPrefix();
 
 /** PayU redirects with POST (form body); some clients may use GET — merge both. */
 const payuCallbackParams = (req) => ({ ...req.query, ...req.body });
@@ -59,8 +68,8 @@ router.post('/initiate/cab', async (req, res) => {
             phone: guestPhone,
             udf1: 'cab',
             udf2: booking._id.toString(),
-            surl: `${API_BASE}/api/payments/callback/success`,
-            furl: `${API_BASE}/api/payments/callback/failure`,
+            surl: `${PAYU_CALLBACK_API_PREFIX}/payments/callback/success`,
+            furl: `${PAYU_CALLBACK_API_PREFIX}/payments/callback/failure`,
         });
 
         res.setHeader('Content-Type', 'text/html');
@@ -126,8 +135,8 @@ router.post('/initiate/hotel', async (req, res) => {
             phone: guestPhone || '9999999999',
             udf1: 'hotel',
             udf2: booking._id.toString(),
-            surl: `${API_BASE}/api/payments/callback/success`,
-            furl: `${API_BASE}/api/payments/callback/failure`,
+            surl: `${PAYU_CALLBACK_API_PREFIX}/payments/callback/success`,
+            furl: `${PAYU_CALLBACK_API_PREFIX}/payments/callback/failure`,
         });
 
         res.setHeader('Content-Type', 'text/html');
@@ -181,8 +190,8 @@ router.post('/initiate/package', async (req, res) => {
             phone: primaryGuestPhone || '9999999999',
             udf1: 'package',
             udf2: booking._id.toString(),
-            surl: `${API_BASE}/api/payments/callback/success`,
-            furl: `${API_BASE}/api/payments/callback/failure`,
+            surl: `${PAYU_CALLBACK_API_PREFIX}/payments/callback/success`,
+            furl: `${PAYU_CALLBACK_API_PREFIX}/payments/callback/failure`,
         });
 
         res.setHeader('Content-Type', 'text/html');

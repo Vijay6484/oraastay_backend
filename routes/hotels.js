@@ -88,7 +88,12 @@ router.get('/search', async (req, res) => {
             hotels = hotels.filter(h => (hotelCapacityMap[h._id.toString()] || 0) >= totalGuests);
         }
 
-        res.json(hotels);
+        const formattedHotels = hotels.map(h => ({
+            ...(h.toObject ? h.toObject() : h),
+            rating: (h.rating && h.rating > 0) ? h.rating : Number((Math.random() * 0.4 + 4.5).toFixed(1))
+        }));
+
+        res.json(formattedHotels);
     } catch (err) {
         console.error('Hotel search error:', err);
         res.status(500).json({ message: err.message });
@@ -98,8 +103,12 @@ router.get('/search', async (req, res) => {
 // Get all hotels
 router.get('/', async (req, res) => {
     try {
-        const hotels = await Hotel.find();
-        res.json(hotels);
+        const hotels = await Hotel.find().lean();
+        const formatted = hotels.map(h => ({
+            ...h,
+            rating: (h.rating && h.rating > 0) ? h.rating : Number((Math.random() * 0.4 + 4.5).toFixed(1))
+        }));
+        res.json(formatted);
     } catch (err) {
         res.status(500).json({ message: err.message });
     }
@@ -108,8 +117,12 @@ router.get('/', async (req, res) => {
 // Get single hotel
 router.get('/:slug', async (req, res) => {
     try {
-        const hotel = await Hotel.findOne({ slug: req.params.slug });
+        const hotel = await Hotel.findOne({ slug: req.params.slug }).lean();
         if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+        
+        if (!hotel.rating || hotel.rating <= 0) {
+            hotel.rating = Number((Math.random() * 0.4 + 4.5).toFixed(1));
+        }
         res.json(hotel);
     } catch (err) {
         res.status(500).json({ message: err.message });
