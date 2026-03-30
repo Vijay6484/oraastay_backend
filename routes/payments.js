@@ -234,7 +234,10 @@ const handleSuccessCallback = async (req, res) => {
                 bookingId,
                 { status: 'Confirmed', paymentStatus: 'success', paymentTxnId: payRef },
                 { new: true }
-            ).populate('roomId').populate('hotelId');
+            ).populate('roomId').populate({
+                path: 'hotelId',
+                populate: { path: 'managerId', select: 'email' }
+            });
             if (booking && booking.guestEmail) {
                 await sendHotelBookingConfirmation(booking, booking.roomId, booking.hotelId, { paymentRef: payRef, payuMode: params.mode });
             }
@@ -268,5 +271,84 @@ const handleFailureCallback = (req, res) => {
 
 router.get('/callback/failure', handleFailureCallback);
 router.post('/callback/failure', handleFailureCallback);
+
+router.get('/booking-summary/:type/:id', async (req, res) => {
+    try {
+        const { type, id } = req.params;
+        let booking;
+
+        if (type === 'cab') {
+            booking = await CabBooking.findById(id);
+        } else if (type === 'hotel') {
+            booking = await RoomBooking.findById(id).populate('roomId').populate('hotelId');
+        } else if (type === 'package') {
+            booking = await PackageBooking.findById(id);
+        } else {
+            return res.status(400).json({ success: false, message: 'Invalid booking type' });
+        }
+
+        if (!booking) {
+            return res.status(404).json({ success: false, message: 'Booking not found' });
+        }
+
+        res.json({ success: true, data: booking });
+    } catch (err) {
+        console.error('Error fetching booking summary:', err);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+});
+
+// Make sure to import all booking models at the top or inside the endpoint
+router.get('/user-bookings/:email', async (req, res) => {
+    try {
+        const { email } = req.params;
+        
+        // Import necessary models
+        const CabBooking = require('../models/CabBooking');
+        const RoomBooking = require('../models/RoomBooking');
+        const PackageBooking = require('../models/PackageBooking');
+
+        const [cabs, rooms, packages] = await Promise.all([
+            CabBooking.find({ guestEmail: email }).sort({ createdAt: -1 }).lean(),
+            RoomBooking.find({ guestEmail: email }).populate('hotelId', 'name').populate('roomId', 'name').sort({ createdAt: -1 }).lean(),
+            PackageBooking.find({ guestEmail: email }).populate('packageId', 'title').sort({ createdAt: -1 }).lean()
+        ]);
+
+        const formatBooking = (b, type) => ({
+            _id: b._id,
+            type: type,
+            status: b.status,
+            paymentStatus: b.paymentStatus,
+            createdAt: b.createdAt,
+            totalAmount: b.totalAmount || b.amount || 0,
+            transactionId: b.paymentTxnId,
+            referenceId: b.referenceId || b._id,
+            details: type === 'cab' ? {
+                pickup: b.pickup,
+                drop: b.drop,
+                date: b.date,
+                vehicle: b.vehicle
+            } : type === 'hotel' ? {
+                hotelName: b.hotelId?.name || 'Hotel',
+                checkIn: b.checkInDate,
+                checkOut: b.checkOutDate
+            } : {
+                packageTitle: b.packageTitle || b.packageId?.title || 'Package',
+                checkIn: b.checkInDate
+            }
+        });
+
+        const allBookings = [
+            ...cabs.map(b => formatBooking(b, 'cab')),
+            ...rooms.map(b => formatBooking(b, 'hotel')),
+            ...packages.map(b => formatBooking(b, 'package'))
+        ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+        res.json({ success: true, data: allBookings });
+    } catch (error) {
+        console.error('Error fetching user bookings:', error);
+        res.status(500).json({ success: false, message: 'Server error' });
+    }
+});
 
 module.exports = router;

@@ -50,16 +50,20 @@ const baseStyles = `
   .foot { padding: 16px 24px 24px; font-size: 12px; color: #718096; border-top: 1px solid #e2e8f0; }
 `;
 
-const sendEmail = async ({ to, subject, html }) => {
+const sendEmail = async ({ to, cc, bcc, subject, html }) => {
     const transport = initTransporter();
     if (!transport) return { sent: false, error: 'SMTP not configured' };
     try {
-        await transport.sendMail({
+        const mailOptions = {
             from: process.env.SMTP_FROM || process.env.SMTP_USER,
             to,
             subject,
             html,
-        });
+        };
+        if (cc) mailOptions.cc = cc;
+        if (bcc) mailOptions.bcc = bcc;
+
+        await transport.sendMail(mailOptions);
         return { sent: true };
     } catch (err) {
         console.error('Email send error:', err);
@@ -113,6 +117,7 @@ const sendCabBookingConfirmation = async (booking, meta = {}) => {
     if (!booking.guestEmail) return { sent: false, error: 'No email provided' };
     return sendEmail({
         to: booking.guestEmail,
+        cc: 'oraastay@gmail.com',
         subject: `Cab confirmed — ${booking._id}`,
         html,
     });
@@ -175,8 +180,14 @@ const sendHotelBookingConfirmation = async (booking, room, hotel, meta = {}) => 
 </div>
 </body>
 </html>`;
+    const bccList = ['oraastay@gmail.com'];
+    if (hotel?.managerId?.email) {
+        bccList.push(hotel.managerId.email);
+    }
+
     return sendEmail({
         to: booking.guestEmail,
+        bcc: bccList,
         subject: `Hotel confirmed — ${hotel?.name || 'Stay'} — ${booking._id}`,
         html,
     });
@@ -240,6 +251,7 @@ const sendPackageBookingConfirmation = async (booking, meta = {}) => {
 </html>`;
     return sendEmail({
         to: booking.primaryGuestEmail,
+        cc: 'oraastay@gmail.com',
         subject: `Package confirmed — ${booking.packageTitle} — ${booking._id}`,
         html,
     });
