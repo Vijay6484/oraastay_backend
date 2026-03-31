@@ -126,7 +126,7 @@ const sendCabBookingConfirmation = async (booking, meta = {}) => {
 const sendHotelBookingConfirmation = async (booking, room, hotel, meta = {}) => {
     const { paymentRef = '', payuMode = '' } = meta;
     const g = booking.guests || {};
-    const html = `<!DOCTYPE html>
+    const getHtml = (showPrice) => `<!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><style>${baseStyles}</style></head>
 <body>
@@ -157,8 +157,8 @@ const sendHotelBookingConfirmation = async (booking, room, hotel, meta = {}) => 
           <tr><td class="label">Adults</td><td>${escapeHtml(String(g.adults ?? 0))}</td></tr>
           <tr><td class="label">Children</td><td>${escapeHtml(String(g.children ?? 0))}</td></tr>
           <tr><td class="label">Rooms</td><td>${escapeHtml(String(g.rooms ?? 1))}</td></tr>
-          <tr><td class="label">Total paid</td><td>₹${escapeHtml(String(booking.totalAmount ?? 0))}</td></tr>
-          ${booking.advanceAmount ? `<tr><td class="label">Advance</td><td>₹${escapeHtml(String(booking.advanceAmount))}</td></tr>` : ''}
+          ${showPrice ? `<tr><td class="label">Total paid</td><td>₹${escapeHtml(String(booking.totalAmount ?? 0))}</td></tr>` : ''}
+          ${(showPrice && booking.advanceAmount) ? `<tr><td class="label">Advance</td><td>₹${escapeHtml(String(booking.advanceAmount))}</td></tr>` : ''}
         </table>
       </div>
       <div class="section">
@@ -180,17 +180,26 @@ const sendHotelBookingConfirmation = async (booking, room, hotel, meta = {}) => 
 </div>
 </body>
 </html>`;
-    const bccList = ['oraastay@gmail.com'];
-    if (hotel?.managerId?.email) {
-        bccList.push(hotel.managerId.email);
-    }
 
-    return sendEmail({
+    const bccList = ['oraastay@gmail.com'];
+    
+    const p1 = sendEmail({
         to: booking.guestEmail,
         bcc: bccList,
         subject: `Hotel confirmed — ${hotel?.name || 'Stay'} — ${booking._id}`,
-        html,
+        html: getHtml(true),
     });
+
+    let p2 = Promise.resolve();
+    if (hotel?.managerId?.email) {
+        p2 = sendEmail({
+            to: hotel.managerId.email,
+            subject: `New Hotel Booking — ${hotel?.name || 'Stay'} — ${booking._id}`,
+            html: getHtml(false),
+        });
+    }
+
+    return Promise.all([p1, p2]);
 };
 
 const sendPackageBookingConfirmation = async (booking, meta = {}) => {
@@ -229,6 +238,7 @@ const sendPackageBookingConfirmation = async (booking, meta = {}) => {
           ${payuMode ? `<tr><td class="label">Payment mode</td><td>${escapeHtml(payuMode)}</td></tr>` : ''}
           <tr><td class="label">Package</td><td>${escapeHtml(booking.packageTitle)}</td></tr>
           <tr><td class="label">Check-in date</td><td>${escapeHtml(booking.checkInDate)}</td></tr>
+          ${booking.checkOutDate ? `<tr><td class="label">Check-out date</td><td>${escapeHtml(booking.checkOutDate)}</td></tr>` : ''}
           <tr><td class="label">Adults / children</td><td>${escapeHtml(String(booking.adults))} / ${escapeHtml(String(booking.children))}</td></tr>
           <tr><td class="label">Total guests</td><td>${escapeHtml(String(booking.totalGuests ?? ''))}</td></tr>
           <tr><td class="label">Amount paid</td><td>₹${escapeHtml(String(booking.amount ?? 0))}</td></tr>

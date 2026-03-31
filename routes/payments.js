@@ -162,10 +162,24 @@ router.post('/initiate/package', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Missing required fields including amount' });
         }
 
+        const Package = require('../models/Package');
+        const pkg = await Package.findById(packageId).lean();
+        let checkOutDate = '';
+        if (pkg && checkInDate) {
+            const numDays = pkg.numDays || 1;
+            const inDate = new Date(checkInDate);
+            if (!isNaN(inDate.getTime())) {
+                const outDate = new Date(inDate);
+                outDate.setDate(inDate.getDate() + (numDays - 1));
+                checkOutDate = outDate.toISOString().split('T')[0];
+            }
+        }
+
         const booking = new PackageBooking({
             packageId,
             packageTitle,
             checkInDate,
+            checkOutDate,
             adults: adults || 1,
             children: children || 0,
             guests: guests || [],

@@ -10,6 +10,10 @@ const PackageSchema = new mongoose.Schema({
     perPerson: { type: String },  // e.g. "per couple", "per person"
     description: { type: String },
     features: [{ type: String }],
+    extraServices: [{
+        title: { type: String, required: true },
+        price: { type: Number, required: true }
+    }],
     highlights: [{ type: String }],  // bullet highlights shown on detail page
     tag: { type: String },  // e.g. "Bestseller"
     images: [{ type: String }],  // multiple images

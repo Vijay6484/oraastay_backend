@@ -20,6 +20,9 @@ const packageBookingSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    checkOutDate: {
+        type: String,
+    },
     adults: {
         type: Number,
         required: true,
