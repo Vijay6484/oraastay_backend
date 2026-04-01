@@ -88,8 +88,18 @@ router.get('/search', async (req, res) => {
             hotels = hotels.filter(h => (hotelCapacityMap[h._id.toString()] || 0) >= totalGuests);
         }
 
+        // Add subTypes for frontend filtering
+        const allAssociatedRooms = await Room.find({ hotelId: { $in: hotels.map(h => h._id) } }).lean();
+        const hotelSubtypesMap = {};
+        allAssociatedRooms.forEach(r => {
+            const hid = r.hotelId.toString();
+            if (!hotelSubtypesMap[hid]) hotelSubtypesMap[hid] = new Set();
+            if (r.subType) hotelSubtypesMap[hid].add(r.subType);
+        });
+
         const formattedHotels = hotels.map(h => ({
             ...(h.toObject ? h.toObject() : h),
+            subTypes: Array.from(hotelSubtypesMap[h._id.toString()] || []),
             rating: (h.rating && h.rating > 0) ? h.rating : Number((Math.random() * 0.4 + 4.5).toFixed(1))
         }));
 
@@ -104,8 +114,18 @@ router.get('/search', async (req, res) => {
 router.get('/', async (req, res) => {
     try {
         const hotels = await Hotel.find().lean();
+        const rooms = await Room.find({ hotelId: { $in: hotels.map(h => h._id) } }).lean();
+        
+        const hotelSubtypesMap = {};
+        rooms.forEach(r => {
+            const hid = r.hotelId.toString();
+            if (!hotelSubtypesMap[hid]) hotelSubtypesMap[hid] = new Set();
+            if (r.subType) hotelSubtypesMap[hid].add(r.subType);
+        });
+
         const formatted = hotels.map(h => ({
             ...h,
+            subTypes: Array.from(hotelSubtypesMap[h._id.toString()] || []),
             rating: (h.rating && h.rating > 0) ? h.rating : Number((Math.random() * 0.4 + 4.5).toFixed(1))
         }));
         res.json(formatted);

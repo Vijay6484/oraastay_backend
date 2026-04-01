@@ -14,6 +14,10 @@ const PackageSchema = new mongoose.Schema({
         title: { type: String, required: true },
         price: { type: Number, required: true }
     }],
+    foodOptions: [{
+        title: { type: String, required: true },
+        price: { type: Number, required: true }
+    }],
     highlights: [{ type: String }],  // bullet highlights shown on detail page
     tag: { type: String },  // e.g. "Bestseller"
     images: [{ type: String }],  // multiple images

@@ -154,7 +154,7 @@ router.post('/initiate/package', async (req, res) => {
     }
     try {
         const {
-            packageId, packageTitle, checkInDate, adults, children, guests,
+            packageId, packageTitle, checkInDate, checkOutDate: reqCheckOutDate, adults, children, guests,
             primaryGuestName, primaryGuestEmail, primaryGuestPhone, totalGuests, notes, amount,
         } = req.body;
 
@@ -164,8 +164,8 @@ router.post('/initiate/package', async (req, res) => {
 
         const Package = require('../models/Package');
         const pkg = await Package.findById(packageId).lean();
-        let checkOutDate = '';
-        if (pkg && checkInDate) {
+        let checkOutDate = reqCheckOutDate || '';
+        if (!checkOutDate && pkg && checkInDate) {
             const numDays = pkg.numDays || 1;
             const inDate = new Date(checkInDate);
             if (!isNaN(inDate.getTime())) {

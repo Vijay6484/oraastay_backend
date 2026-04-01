@@ -4,6 +4,7 @@ const RoomSchema = new mongoose.Schema({
     hotelId: { type: mongoose.Schema.Types.ObjectId, ref: 'Hotel', required: true },
     name: { type: String, required: true },
     type: { type: String, default: 'Standard' },
+    subType: { type: String },
     description: { type: String },
     price: { type: Number, required: true },
     adultRate: { type: Number, default: 0 },
