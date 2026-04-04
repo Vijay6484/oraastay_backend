@@ -10,12 +10,19 @@ function nightsBetween(checkInDate, checkOutDate) {
 
 /**
  * Max guests allowed in one physical unit (room/villa). Falls back if unset.
+ * If maxPersonsVilla unset but extra guest rates exist, allow headroom for paid extras.
  */
-function effectiveMaxGuestsPerRoom(maxPersonsVilla, capacity) {
+function effectiveMaxGuestsPerRoom(maxPersonsVilla, capacity, opts = {}) {
     const n = Number(maxPersonsVilla) || 0;
     if (n > 0) return n;
     const sum = (capacity?.adults || 0) + (capacity?.children || 0);
-    return Math.max(2, sum || 2);
+    const base = Math.max(2, sum || 2);
+    const ar = Number(opts.adultRate) || 0;
+    const cr = Number(opts.childRate) || 0;
+    if (ar > 0 || cr > 0) {
+        return Math.min(24, base + 6);
+    }
+    return base;
 }
 
 /**
@@ -40,7 +47,10 @@ function computeHotelRoomBookingTotals({
     const A = Math.max(0, Number(adults) || 0);
     const C = Math.max(0, Number(children) || 0);
     const cap = capacity || { adults: 2, children: 0 };
-    const maxPerRoom = effectiveMaxGuestsPerRoom(maxPersonsVilla, cap);
+    const maxPerRoom = effectiveMaxGuestsPerRoom(maxPersonsVilla, cap, {
+        adultRate,
+        childRate,
+    });
     const maxTotalGuests = maxPerRoom * R;
     const baseAdultSlots = (cap.adults ?? 2) * R;
     const baseChildSlots = (cap.children ?? 0) * R;
