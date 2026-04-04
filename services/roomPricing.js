@@ -70,9 +70,49 @@ function computeHotelRoomBookingTotals({
     };
 }
 
+/**
+ * Hotel-level add-ons: extra + food priced per person per night; cab fixed once.
+ * Indices must match arrays on the Hotel document (validated server-side).
+ */
+function computeHotelAddonsSubtotal({
+    extraServices = [],
+    foodOptions = [],
+    cabServices = [],
+    selectedExtras = [],
+    selectedFood = [],
+    selectedCabs = [],
+    headcount,
+    nights,
+}) {
+    const N = Math.max(1, Number(nights) || 1);
+    const H = Math.max(0, Number(headcount) || 0);
+    const inRange = (arr, idx) => Number.isInteger(idx) && idx >= 0 && idx < arr.length;
+
+    let perPersonDay = 0;
+    for (const idx of selectedExtras) {
+        if (inRange(extraServices, idx)) {
+            perPersonDay += Number(extraServices[idx].price) || 0;
+        }
+    }
+    for (const idx of selectedFood) {
+        if (inRange(foodOptions, idx)) {
+            perPersonDay += Number(foodOptions[idx].price) || 0;
+        }
+    }
+    let cabTotal = 0;
+    for (const idx of selectedCabs) {
+        if (inRange(cabServices, idx)) {
+            cabTotal += Number(cabServices[idx].price) || 0;
+        }
+    }
+    const addonsSubtotal = perPersonDay * H * N + cabTotal;
+    return { addonsSubtotal, perPersonDayTotal: perPersonDay, cabTotal };
+}
+
 module.exports = {
     nightsBetween,
     effectiveMaxGuestsPerRoom,
     computeHotelRoomBookingTotals,
+    computeHotelAddonsSubtotal,
     DEFAULT_TAX_RATE,
 };

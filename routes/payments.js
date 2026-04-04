@@ -11,10 +11,20 @@ const {
 } = require('../services/paymentService');
 const { getRoomAvailability } = require('../services/roomAvailability');
 const Room = require('../models/Room');
+const Hotel = require('../models/Hotel');
 const {
     nightsBetween,
     computeHotelRoomBookingTotals,
+    computeHotelAddonsSubtotal,
+    DEFAULT_TAX_RATE,
 } = require('../services/roomPricing');
+
+function parseAddonIndexArray(v) {
+    if (!Array.isArray(v)) return [];
+    return v
+        .map((x) => parseInt(x, 10))
+        .filter((n) => Number.isInteger(n) && n >= 0);
+}
 const {
     sendCabBookingConfirmation,
     sendHotelBookingConfirmation,
@@ -102,6 +112,10 @@ router.post('/initiate/hotel', async (req, res) => {
             guests,
             totalAmount,
             discountAmount,
+            specialRequests: rawSpecialRequests,
+            selectedExtras: rawSelectedExtras,
+            selectedFood: rawSelectedFood,
+            selectedCabs: rawSelectedCabs,
         } = req.body;
         if (!roomId || !hotelId || !guestName || !guestEmail || !checkInDate || !checkOutDate || totalAmount == null) {
             return res.status(400).json({ success: false, message: 'Missing required fields' });
@@ -155,17 +169,62 @@ router.post('/initiate/hotel', async (req, res) => {
             });
         }
 
+        const hotelDoc = await Hotel.findById(hotelId).lean();
+        const selectedExtras = parseAddonIndexArray(rawSelectedExtras);
+        const selectedFood = parseAddonIndexArray(rawSelectedFood);
+        const selectedCabs = parseAddonIndexArray(rawSelectedCabs);
+        const headcount = adults + children;
+        const addonCalc = computeHotelAddonsSubtotal({
+            extraServices: hotelDoc?.extraServices || [],
+            foodOptions: hotelDoc?.foodOptions || [],
+            cabServices: hotelDoc?.cabServices || [],
+            selectedExtras,
+            selectedFood,
+            selectedCabs,
+            headcount,
+            nights,
+        });
+
+        const combinedSubtotal = totals.subtotal + addonCalc.addonsSubtotal;
+        const taxesOnCombined = combinedSubtotal * DEFAULT_TAX_RATE;
+        const totalBeforeDiscount = combinedSubtotal + taxesOnCombined;
+
         const disc = Math.max(0, Number(discountAmount) || 0);
-        if (disc > totals.totalBeforeDiscount + 0.01) {
+        if (disc > totalBeforeDiscount + 0.01) {
             return res.status(400).json({ success: false, message: 'Invalid discount amount' });
         }
-        const expectedPay = Math.max(0, totals.totalBeforeDiscount - disc);
+        const expectedPay = Math.max(0, totalBeforeDiscount - disc);
         if (Math.abs(Number(totalAmount) - expectedPay) > 2) {
             return res.status(400).json({
                 success: false,
                 message: 'Payment amount does not match the current quote. Please refresh and try again.',
             });
         }
+
+        let addonNotes = '';
+        const es = hotelDoc?.extraServices || [];
+        const fo = hotelDoc?.foodOptions || [];
+        const cabs = hotelDoc?.cabServices || [];
+        if (selectedExtras.length > 0) {
+            const items = selectedExtras.map((i) => es[i]).filter(Boolean);
+            if (items.length > 0) {
+                addonNotes += `Extra Services: ${items.map((s) => `${s.title} (₹${s.price})`).join(', ')}. `;
+            }
+        }
+        if (selectedFood.length > 0) {
+            const items = selectedFood.map((i) => fo[i]).filter(Boolean);
+            if (items.length > 0) {
+                addonNotes += `Food Options: ${items.map((s) => `${s.title} (₹${s.price})`).join(', ')}. `;
+            }
+        }
+        if (selectedCabs.length > 0) {
+            const items = selectedCabs.map((i) => cabs[i]).filter(Boolean);
+            if (items.length > 0) {
+                addonNotes += `Cab (fixed): ${items.map((s) => `${s.title} (₹${s.price})`).join(', ')}. `;
+            }
+        }
+        const userNotes = typeof rawSpecialRequests === 'string' ? rawSpecialRequests.trim() : '';
+        const mergedSpecial = [addonNotes.trim(), userNotes].filter(Boolean).join('\n\n');
 
         const booking = new RoomBooking({
             roomId,
@@ -180,6 +239,7 @@ router.post('/initiate/hotel', async (req, res) => {
             advanceAmount: totalAmount,
             status: 'Pending',
             paymentStatus: 'pending',
+            specialRequests: mergedSpecial || undefined,
         });
         await booking.save();
 

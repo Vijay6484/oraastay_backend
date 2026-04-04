@@ -38,7 +38,20 @@ const HotelSchema = new mongoose.Schema({
     inventory: { type: Number, default: 5 }, // Available rooms/units
     description: { type: String },
     rules: [{ type: String }],
-    managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null }
+    managerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    /** Optional paid add-ons on the room booking page (same model as packages) */
+    extraServices: [{
+        title: { type: String, required: true },
+        price: { type: Number, required: true },
+    }],
+    cabServices: [{
+        title: { type: String, required: true },
+        price: { type: Number, required: true },
+    }],
+    foodOptions: [{
+        title: { type: String, required: true },
+        price: { type: Number, required: true },
+    }],
 }, { timestamps: true });
 
 module.exports = mongoose.model('Hotel', HotelSchema);

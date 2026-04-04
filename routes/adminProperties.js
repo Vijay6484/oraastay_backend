@@ -172,6 +172,9 @@ router.get('/accommodations/:id', ...requireProperties, async (req, res) => {
                 unitImages: hotel.unitImages || [],
                 latitude: hotel.latitude,
                 longitude: hotel.longitude,
+                extraServices: hotel.extraServices || [],
+                cabServices: hotel.cabServices || [],
+                foodOptions: hotel.foodOptions || [],
             },
             roomsData: rooms,
         });
