@@ -13,6 +13,8 @@ const RoomSchema = new mongoose.Schema({
         adults: { type: Number, default: 2 },
         children: { type: Number, default: 0 }
     },
+    /** Same as hotel.baseGuestsIncluded — total headcount in base rate per unit */
+    baseGuestsIncluded: { type: Number, default: 0 },
     maxPersonsVilla: { type: Number, default: 0 },
     amenities: [{ type: String }],
     images: [{ type: String }], // Array of image URLs

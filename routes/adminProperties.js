@@ -25,7 +25,9 @@ function formatHotelResponse(hotel, rooms) {
         type: hotel.type || 'Villa',
         description: hotel.description || '',
         price: hotel.price || 0,
-        capacity: hotel.unitCapacity?.adults ? hotel.unitCapacity.adults + (hotel.unitCapacity.children || 0) : 2,
+        capacity: Number(hotel.baseGuestsIncluded) > 0
+            ? hotel.baseGuestsIncluded
+            : (hotel.unitCapacity?.adults ? hotel.unitCapacity.adults + (hotel.unitCapacity.children || 0) : 2),
         rooms: hotel.inventory || rooms.length || 0,
         available: true,
         features: hotel.amenities || [],
@@ -167,6 +169,7 @@ router.get('/accommodations/:id', ...requireProperties, async (req, res) => {
                 adultRate: hotel.adultRate,
                 childRate: hotel.childRate,
                 unitCapacity: hotel.unitCapacity || { adults: 2, children: 0 },
+                baseGuestsIncluded: hotel.baseGuestsIncluded ?? 0,
                 maxPersonsVilla: hotel.maxPersonsVilla ?? 0,
                 unitAmenities: hotel.unitAmenities || [],
                 unitImages: hotel.unitImages || [],

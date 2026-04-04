@@ -17,7 +17,11 @@ async function syncDefaultRoomForHotel(hotel) {
         price: doc.price,
         adultRate: doc.adultRate ?? 0,
         childRate: doc.childRate ?? 0,
-        capacity: doc.unitCapacity || { adults: 2, children: 0 },
+        baseGuestsIncluded: Number(doc.baseGuestsIncluded) > 0 ? Number(doc.baseGuestsIncluded) : 0,
+        capacity:
+            Number(doc.baseGuestsIncluded) > 0
+                ? { adults: 0, children: 0 }
+                : (doc.unitCapacity || { adults: 2, children: 0 }),
         maxPersonsVilla: doc.maxPersonsVilla != null ? doc.maxPersonsVilla : 0,
         amenities:
             Array.isArray(doc.unitAmenities) && doc.unitAmenities.length > 0

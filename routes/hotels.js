@@ -5,6 +5,12 @@ const Hotel = require('../models/Hotel');
 const Room = require('../models/Room');
 const RoomBooking = require('../models/RoomBooking');
 
+function roomListedGuestCap(r) {
+    const bg = Number(r.baseGuestsIncluded) || 0;
+    if (bg > 0) return bg;
+    return (r.capacity?.adults || 0) + (r.capacity?.children || 0) || 2;
+}
+
 // Helper: get dates between start and end (exclusive of end)
 function getDatesBetween(startStr, endStr) {
     const dates = [];
@@ -45,7 +51,7 @@ router.get('/search', async (req, res) => {
                 const hid = r.hotelId?.toString?.() || r.hotelId;
                 if (!hotelRoomsMap[hid]) hotelRoomsMap[hid] = [];
                 hotelRoomsMap[hid].push(r);
-                const cap = (r.capacity?.adults || 0) + (r.capacity?.children || 0) || 2;
+                const cap = roomListedGuestCap(r);
                 hotelInventoryMap[hid] = (hotelInventoryMap[hid] || 0) + (r.inventory || 1) * Math.max(1, cap);
             });
 
@@ -83,7 +89,7 @@ router.get('/search', async (req, res) => {
             const hotelCapacityMap = {};
             roomsByHotel.forEach(r => {
                 const hid = r.hotelId?.toString?.() || r.hotelId;
-                const cap = (r.capacity?.adults || 0) + (r.capacity?.children || 0) || 2;
+                const cap = roomListedGuestCap(r);
                 hotelCapacityMap[hid] = (hotelCapacityMap[hid] || 0) + (r.inventory || 1) * Math.max(1, cap);
             });
             hotels = hotels.filter(h => (hotelCapacityMap[h._id.toString()] || 0) >= totalGuests);

@@ -155,6 +155,7 @@ router.post('/initiate/hotel', async (req, res) => {
             adultRate: room.adultRate,
             childRate: room.childRate,
             capacity: room.capacity,
+            baseGuestsIncluded: room.baseGuestsIncluded,
             maxPersonsVilla: room.maxPersonsVilla,
             rooms: requestedRooms,
             nights,

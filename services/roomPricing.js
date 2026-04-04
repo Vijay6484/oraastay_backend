@@ -15,7 +15,10 @@ function nightsBetween(checkInDate, checkOutDate) {
 function effectiveMaxGuestsPerRoom(maxPersonsVilla, capacity, opts = {}) {
     const n = Number(maxPersonsVilla) || 0;
     if (n > 0) return n;
-    const sum = (capacity?.adults || 0) + (capacity?.children || 0);
+    const bg = Number(opts.baseGuestsIncluded) || 0;
+    const sum = bg > 0
+        ? bg
+        : (capacity?.adults || 0) + (capacity?.children || 0);
     const base = Math.max(2, sum || 2);
     const ar = Number(opts.adultRate) || 0;
     const cr = Number(opts.childRate) || 0;
@@ -35,6 +38,7 @@ function computeHotelRoomBookingTotals({
     adultRate,
     childRate,
     capacity,
+    baseGuestsIncluded,
     maxPersonsVilla,
     rooms,
     nights,
@@ -47,15 +51,43 @@ function computeHotelRoomBookingTotals({
     const A = Math.max(0, Number(adults) || 0);
     const C = Math.max(0, Number(children) || 0);
     const cap = capacity || { adults: 2, children: 0 };
+    const bg = Number(baseGuestsIncluded) || 0;
+    const usePool = bg > 0;
+
     const maxPerRoom = effectiveMaxGuestsPerRoom(maxPersonsVilla, cap, {
         adultRate,
         childRate,
+        baseGuestsIncluded: usePool ? bg : 0,
     });
     const maxTotalGuests = maxPerRoom * R;
-    const baseAdultSlots = (cap.adults ?? 2) * R;
-    const baseChildSlots = (cap.children ?? 0) * R;
-    const extraAdults = Math.max(0, A - baseAdultSlots);
-    const extraChildren = Math.max(0, C - baseChildSlots);
+
+    let extraAdults;
+    let extraChildren;
+    let includedBaseGuestTotal;
+    let includedAdultsCap;
+    let includedChildrenCap;
+
+    if (usePool) {
+        const B = bg * R;
+        let rem = B;
+        const adultsInBase = Math.min(A, rem);
+        rem -= adultsInBase;
+        const childrenInBase = Math.min(C, rem);
+        extraAdults = A - adultsInBase;
+        extraChildren = C - childrenInBase;
+        includedBaseGuestTotal = B;
+        includedAdultsCap = adultsInBase;
+        includedChildrenCap = childrenInBase;
+    } else {
+        const baseAdultSlots = (cap.adults ?? 2) * R;
+        const baseChildSlots = (cap.children ?? 0) * R;
+        extraAdults = Math.max(0, A - baseAdultSlots);
+        extraChildren = Math.max(0, C - baseChildSlots);
+        includedBaseGuestTotal = baseAdultSlots + baseChildSlots;
+        includedAdultsCap = baseAdultSlots;
+        includedChildrenCap = baseChildSlots;
+    }
+
     const extraNightly =
         extraAdults * (Number(adultRate) || 0) + extraChildren * (Number(childRate) || 0);
     const baseSubtotal = (Number(roomPrice) || 0) * R * N;
@@ -71,6 +103,10 @@ function computeHotelRoomBookingTotals({
         extraAdults,
         extraChildren,
         extraNightly,
+        includedBaseGuestTotal,
+        includedAdultsCap,
+        includedChildrenCap,
+        usesPoolBase: usePool,
         baseSubtotal,
         extrasSubtotal,
         subtotal,

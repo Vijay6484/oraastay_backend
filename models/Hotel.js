@@ -31,6 +31,8 @@ const HotelSchema = new mongoose.Schema({
         adults: { type: Number, default: 2 },
         children: { type: Number, default: 0 },
     },
+    /** Total guests (adults + children) included in base nightly rate per unit; when >0, overrides split in unitCapacity for pricing */
+    baseGuestsIncluded: { type: Number, default: 0 },
     /** Max total guests (adults + children) per booked unit; enforced on the website */
     maxPersonsVilla: { type: Number, default: 0 },
     unitAmenities: [{ type: String }],
