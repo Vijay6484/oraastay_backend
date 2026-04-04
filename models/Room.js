@@ -13,6 +13,7 @@ const RoomSchema = new mongoose.Schema({
         adults: { type: Number, default: 2 },
         children: { type: Number, default: 0 }
     },
+    maxPersonsVilla: { type: Number, default: 0 },
     amenities: [{ type: String }],
     images: [{ type: String }], // Array of image URLs
     inventory: { type: Number, default: 1 } // Number of such rooms available

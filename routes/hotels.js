@@ -1,4 +1,5 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const router = express.Router();
 const Hotel = require('../models/Hotel');
 const Room = require('../models/Room');
@@ -134,7 +135,26 @@ router.get('/', async (req, res) => {
     }
 });
 
-// Get single hotel
+// By MongoDB id (booking page, etc.) — must be registered before /:slug
+router.get('/by-id/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+            return res.status(400).json({ message: 'Invalid hotel id' });
+        }
+        const hotel = await Hotel.findById(id).lean();
+        if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+
+        if (!hotel.rating || hotel.rating <= 0) {
+            hotel.rating = Number((Math.random() * 0.4 + 4.5).toFixed(1));
+        }
+        res.json(hotel);
+    } catch (err) {
+        res.status(500).json({ message: err.message });
+    }
+});
+
+// Get single hotel by slug
 router.get('/:slug', async (req, res) => {
     try {
         const hotel = await Hotel.findOne({ slug: req.params.slug }).lean();

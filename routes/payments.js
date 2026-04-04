@@ -10,6 +10,11 @@ const {
     verifyPayUReverseHash,
 } = require('../services/paymentService');
 const { getRoomAvailability } = require('../services/roomAvailability');
+const Room = require('../models/Room');
+const {
+    nightsBetween,
+    computeHotelRoomBookingTotals,
+} = require('../services/roomPricing');
 const {
     sendCabBookingConfirmation,
     sendHotelBookingConfirmation,
@@ -86,8 +91,19 @@ router.post('/initiate/hotel', async (req, res) => {
         return res.status(503).json({ success: false, message: 'Payment gateway not configured' });
     }
     try {
-        const { roomId, hotelId, guestName, guestEmail, guestPhone, checkInDate, checkOutDate, guests, totalAmount } = req.body;
-        if (!roomId || !hotelId || !guestName || !guestEmail || !checkInDate || !checkOutDate || !totalAmount) {
+        const {
+            roomId,
+            hotelId,
+            guestName,
+            guestEmail,
+            guestPhone,
+            checkInDate,
+            checkOutDate,
+            guests,
+            totalAmount,
+            discountAmount,
+        } = req.body;
+        if (!roomId || !hotelId || !guestName || !guestEmail || !checkInDate || !checkOutDate || totalAmount == null) {
             return res.status(400).json({ success: false, message: 'Missing required fields' });
         }
 
@@ -106,6 +122,48 @@ router.post('/initiate/hotel', async (req, res) => {
             return res.status(409).json({
                 success: false,
                 message: `Only ${availability.data.minRemaining} room(s) available for the selected dates.`,
+            });
+        }
+
+        const room = await Room.findById(roomId).lean();
+        if (!room) {
+            return res.status(400).json({ success: false, message: 'Room not found' });
+        }
+        if (String(room.hotelId) !== String(hotelId)) {
+            return res.status(400).json({ success: false, message: 'Room does not belong to this property' });
+        }
+
+        const nights = nightsBetween(checkInDate, checkOutDate);
+        const adults = Math.max(0, parseInt(guests?.adults, 10) || 0);
+        const children = Math.max(0, parseInt(guests?.children, 10) || 0);
+        const totals = computeHotelRoomBookingTotals({
+            roomPrice: room.price,
+            adultRate: room.adultRate,
+            childRate: room.childRate,
+            capacity: room.capacity,
+            maxPersonsVilla: room.maxPersonsVilla,
+            rooms: requestedRooms,
+            nights,
+            adults,
+            children,
+        });
+
+        if (!totals.validGuestCount) {
+            return res.status(400).json({
+                success: false,
+                message: `Guest count is invalid. Maximum ${totals.maxTotalGuests} guest(s) for this booking (up to ${totals.maxPerRoom} per unit). At least 1 adult is required.`,
+            });
+        }
+
+        const disc = Math.max(0, Number(discountAmount) || 0);
+        if (disc > totals.totalBeforeDiscount + 0.01) {
+            return res.status(400).json({ success: false, message: 'Invalid discount amount' });
+        }
+        const expectedPay = Math.max(0, totals.totalBeforeDiscount - disc);
+        if (Math.abs(Number(totalAmount) - expectedPay) > 2) {
+            return res.status(400).json({
+                success: false,
+                message: 'Payment amount does not match the current quote. Please refresh and try again.',
             });
         }
 

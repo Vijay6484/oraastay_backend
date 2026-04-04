@@ -49,7 +49,7 @@ function requireDashboardAccess(req, res, next) {
     return res.status(403).json({ success: false, message: 'Dashboard access denied' });
 }
 
-const MANAGER_MODULES = new Set(['dashboard', 'properties', 'bookings', 'calendar', 'amenities', 'cities']);
+const MANAGER_MODULES = new Set(['dashboard', 'properties', 'bookings', 'calendar', 'amenities']);
 
 /**
  * @param {string} moduleKey - permission key (e.g. 'coupons', 'properties')

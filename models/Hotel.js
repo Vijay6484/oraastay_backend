@@ -4,9 +4,12 @@ const HotelSchema = new mongoose.Schema({
     name: { type: String, required: true },
     slug: { type: String, required: true, unique: true },
     location: { type: String, required: true },
+    city: { type: String, default: '' },
+    latitude: { type: Number },
+    longitude: { type: Number },
     rating: { type: Number, default: () => Number((Math.random() * 0.4 + 4.5).toFixed(1)) },
     reviews: { type: Number, default: 0 },
-    price: { type: Number, required: true },
+    price: { type: Number, default: 1 },
     originalPrice: { type: Number },
     amenities: [{ type: String }],
     images: [{ type: String }], // Array of image URLs
@@ -14,32 +17,24 @@ const HotelSchema = new mongoose.Schema({
     featured: { type: Boolean, default: false },
     type: {
         type: String,
-        enum: [
-            'Hotel',
-            'Resort',
-            'Villa',
-            'Cottage',
-            'Glamping',
-            'Camping',
-            'Bungalow',
-            'Apartment',
-            'Homestay',
-            'Farmhouse'
-        ],
-        default: 'Hotel'
+        enum: ['Villa', 'Cottage'],
+        default: 'Villa'
     },
-    subcategory: {
-        type: String,
-        enum: [
-            'Luxury Resorts',
-            'Budget Hotels',
-            'Family Hotels',
-            'Hotels Near Venna Lake',
-            'Hotels Near Arthur\'s Seat',
-            'Panchgani Hotels',
-            'Bhilar Resorts'
-        ]
+    /** Single bookable unit (synced to one Room document for checkout / availability) */
+    unitName: { type: String, default: 'Standard' },
+    unitType: { type: String, default: 'Standard' },
+    unitSubType: { type: String, default: '' },
+    unitDescription: { type: String, default: '' },
+    adultRate: { type: Number, default: 0 },
+    childRate: { type: Number, default: 0 },
+    unitCapacity: {
+        adults: { type: Number, default: 2 },
+        children: { type: Number, default: 0 },
     },
+    /** Max total guests (adults + children) per booked unit; enforced on the website */
+    maxPersonsVilla: { type: Number, default: 0 },
+    unitAmenities: [{ type: String }],
+    unitImages: [{ type: String }],
     inventory: { type: Number, default: 5 }, // Available rooms/units
     description: { type: String },
     rules: [{ type: String }],

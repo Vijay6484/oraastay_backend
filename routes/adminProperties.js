@@ -9,6 +9,7 @@ const {
     requireModuleAccess,
     assertManagerOwnsHotel,
 } = require('../middleware/auth');
+const { syncDefaultRoomForHotel } = require('../services/syncDefaultRoom');
 
 const requireProperties = [requireAuth, requireModuleAccess('properties')];
 
@@ -21,10 +22,10 @@ function formatHotelResponse(hotel, rooms) {
     return {
         id: hotel._id,
         name: hotel.name,
-        type: hotel.type || 'Hotel',
+        type: hotel.type || 'Villa',
         description: hotel.description || '',
         price: hotel.price || 0,
-        capacity: hotel.capacity || 2,
+        capacity: hotel.unitCapacity?.adults ? hotel.unitCapacity.adults + (hotel.unitCapacity.children || 0) : 2,
         rooms: hotel.inventory || rooms.length || 0,
         available: true,
         features: hotel.amenities || [],
@@ -52,15 +53,15 @@ function formatHotelResponse(hotel, rooms) {
 // CREATE Accommodation (Hotel + Rooms)
 router.post('/accommodations', ...requireProperties, async (req, res) => {
     try {
-        const { propertyData, roomsData } = req.body;
+        const { propertyData } = req.body;
 
         if (!propertyData || !propertyData.name) {
             return res.status(400).json({ message: 'Property data is required and must contain a name.' });
         }
 
         const propertyAmenities = propertyData.amenities || [];
-        const roomAmenities = (roomsData || []).reduce((acc, room) => [...acc, ...(room.amenities || [])], []);
-        const combinedAmenities = [...new Set([...propertyAmenities, ...roomAmenities])];
+        const unitAmenities = propertyData.unitAmenities || [];
+        const combinedAmenities = [...new Set([...propertyAmenities, ...unitAmenities])];
 
         const hotelData = {
             ...propertyData,
@@ -71,6 +72,7 @@ router.post('/accommodations', ...requireProperties, async (req, res) => {
 
         delete hotelData._id;
         delete hotelData.id;
+        delete hotelData.subcategory;
 
         if (req.authUser.role === 'manager') {
             hotelData.managerId = new mongoose.Types.ObjectId(req.authUser.id);
@@ -85,21 +87,12 @@ router.post('/accommodations', ...requireProperties, async (req, res) => {
         const hotel = new Hotel(hotelData);
         const savedHotel = await hotel.save();
 
-        const savedRooms = [];
-        if (roomsData && Array.isArray(roomsData) && roomsData.length > 0) {
-            for (const roomItem of roomsData) {
-                const roomData = { ...roomItem, hotelId: savedHotel._id };
-                delete roomData._id;
-                const room = new Room(roomData);
-                const savedRoom = await room.save();
-                savedRooms.push(savedRoom);
-            }
-        }
+        const syncedRoom = await syncDefaultRoomForHotel(savedHotel);
 
         res.status(201).json({
             message: 'Accommodation created successfully',
             hotel: savedHotel,
-            rooms: savedRooms
+            rooms: syncedRoom ? [syncedRoom] : [],
         });
     } catch (error) {
         console.error('Error creating accommodation:', error);
@@ -159,14 +152,28 @@ router.get('/accommodations/:id', ...requireProperties, async (req, res) => {
                 type: hotel.type,
                 description: hotel.description,
                 location: hotel.location,
+                city: hotel.city || '',
                 price: hotel.price,
                 amenities: hotel.amenities,
                 rules: hotel.rules || [],
                 images: hotel.images,
+                video: hotel.video,
                 inventory: hotel.inventory,
                 managerId: hotel.managerId || null,
+                unitName: hotel.unitName,
+                unitType: hotel.unitType,
+                unitSubType: hotel.unitSubType,
+                unitDescription: hotel.unitDescription,
+                adultRate: hotel.adultRate,
+                childRate: hotel.childRate,
+                unitCapacity: hotel.unitCapacity || { adults: 2, children: 0 },
+                maxPersonsVilla: hotel.maxPersonsVilla ?? 0,
+                unitAmenities: hotel.unitAmenities || [],
+                unitImages: hotel.unitImages || [],
+                latitude: hotel.latitude,
+                longitude: hotel.longitude,
             },
-            roomsData: rooms
+            roomsData: rooms,
         });
     } catch (error) {
         console.error('Error fetching accommodation:', error);
@@ -177,7 +184,7 @@ router.get('/accommodations/:id', ...requireProperties, async (req, res) => {
 // UPDATE Accommodation
 router.put('/accommodations/:id', ...requireProperties, async (req, res) => {
     try {
-        const { propertyData, roomsData } = req.body;
+        const { propertyData } = req.body;
 
         if (!propertyData) {
             return res.status(400).json({ message: 'Property data is required.' });
@@ -192,11 +199,12 @@ router.put('/accommodations/:id', ...requireProperties, async (req, res) => {
         }
 
         const propertyAmenities = propertyData.amenities || [];
-        const roomAmenities = (roomsData || []).reduce((acc, room) => [...acc, ...(room.amenities || [])], []);
-        const combinedAmenities = [...new Set([...propertyAmenities, ...roomAmenities])];
+        const unitAmenities = propertyData.unitAmenities || [];
+        const combinedAmenities = [...new Set([...propertyAmenities, ...unitAmenities])];
 
         propertyData.amenities = combinedAmenities;
         propertyData.location = propertyData.location || propertyData.address || hotel.location;
+        delete propertyData.subcategory;
 
         if (req.authUser.role === 'manager') {
             propertyData.managerId = hotel.managerId;
@@ -208,15 +216,7 @@ router.put('/accommodations/:id', ...requireProperties, async (req, res) => {
 
         const updatedHotel = await Hotel.findByIdAndUpdate(req.params.id, propertyData, { new: true });
 
-        if (roomsData) {
-            await Room.deleteMany({ hotelId: updatedHotel._id });
-            for (const roomItem of roomsData) {
-                const roomData = { ...roomItem, hotelId: updatedHotel._id };
-                delete roomData._id;
-                const room = new Room(roomData);
-                await room.save();
-            }
-        }
+        await syncDefaultRoomForHotel(updatedHotel);
 
         res.json({ message: 'Accommodation updated successfully', hotel: updatedHotel });
     } catch (error) {
@@ -265,7 +265,5 @@ router.get('/users', requireAuth, async (req, res) => {
         res.status(500).json({ message: e.message });
     }
 });
-
-router.get('/cities', requireAuth, requireModuleAccess('cities'), (req, res) => res.json([]));
 
 module.exports = router;
