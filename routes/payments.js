@@ -18,6 +18,7 @@ const {
     computeHotelAddonsSubtotal,
     DEFAULT_TAX_RATE,
 } = require('../services/roomPricing');
+const { computePackageBookingTotals } = require('../services/packagePricing');
 
 function parseAddonIndexArray(v) {
     if (!Array.isArray(v)) return [];
@@ -52,9 +53,21 @@ router.post('/initiate/cab', async (req, res) => {
         return res.status(503).json({ success: false, message: 'Payment gateway not configured' });
     }
     try {
-        const { guestName, guestPhone, guestEmail, tripType, pickup, drop, date, time, vehicle, amount } = req.body;
+        const { guestName, guestPhone, guestEmail, tripType, pickup, drop, date, time, vehicle, amount, subtotalBeforeTax } = req.body;
         if (!guestName || !guestPhone || !amount) {
             return res.status(400).json({ success: false, message: 'Missing required fields: guestName, guestPhone, amount' });
+        }
+
+        const paid = Number(amount);
+        const subPre = subtotalBeforeTax != null ? Number(subtotalBeforeTax) : NaN;
+        if (Number.isFinite(subPre) && subPre > 0) {
+            const expected = subPre * (1 + DEFAULT_TAX_RATE);
+            if (Math.abs(paid - expected) > 2) {
+                return res.status(400).json({
+                    success: false,
+                    message: 'Payment amount does not match quoted price with tax. Please refresh and try again.',
+                });
+            }
         }
 
         const booking = new CabBooking({
@@ -67,7 +80,7 @@ router.post('/initiate/cab', async (req, res) => {
             date: date || new Date().toISOString().split('T')[0],
             time: time || '09:00',
             vehicle: vehicle || 'Looking for suitable vehicle',
-            amount,
+            amount: paid,
             status: 'Pending',
             paymentStatus: 'pending',
         });
@@ -76,7 +89,7 @@ router.post('/initiate/cab', async (req, res) => {
         const txnId = `CAB${Date.now()}${booking._id.toString().slice(-6)}`;
         const params = createPaymentParams({
             txnId,
-            amount,
+            amount: paid,
             productInfo: `Cab Booking - ${pickup} to ${drop}`,
             firstName: guestName,
             email: guestEmail || `${guestPhone}@booking.oraastay.com`,
@@ -273,8 +286,22 @@ router.post('/initiate/package', async (req, res) => {
     }
     try {
         const {
-            packageId, packageTitle, checkInDate, checkOutDate: reqCheckOutDate, adults, children, guests,
-            primaryGuestName, primaryGuestEmail, primaryGuestPhone, totalGuests, notes, amount,
+            packageId,
+            packageTitle,
+            checkInDate,
+            checkOutDate: reqCheckOutDate,
+            adults,
+            children,
+            guests,
+            primaryGuestName,
+            primaryGuestEmail,
+            primaryGuestPhone,
+            totalGuests,
+            notes,
+            amount,
+            selectedExtras: rawSelectedExtras,
+            selectedFood: rawSelectedFood,
+            selectedCabs: rawSelectedCabs,
         } = req.body;
 
         if (!packageId || !packageTitle || !checkInDate || !primaryGuestName || !primaryGuestEmail || !primaryGuestPhone || !amount) {
@@ -283,8 +310,12 @@ router.post('/initiate/package', async (req, res) => {
 
         const Package = require('../models/Package');
         const pkg = await Package.findById(packageId).lean();
+        if (!pkg) {
+            return res.status(400).json({ success: false, message: 'Package not found' });
+        }
+
         let checkOutDate = reqCheckOutDate || '';
-        if (!checkOutDate && pkg && checkInDate) {
+        if (!checkOutDate && checkInDate) {
             const numDays = pkg.numDays || 1;
             const inDate = new Date(checkInDate);
             if (!isNaN(inDate.getTime())) {
@@ -292,6 +323,36 @@ router.post('/initiate/package', async (req, res) => {
                 outDate.setDate(inDate.getDate() + (numDays - 1));
                 checkOutDate = outDate.toISOString().split('T')[0];
             }
+        }
+
+        if (!checkOutDate) {
+            return res.status(400).json({ success: false, message: 'Check-out date is required' });
+        }
+
+        const selectedExtras = parseAddonIndexArray(rawSelectedExtras);
+        const selectedFood = parseAddonIndexArray(rawSelectedFood);
+        const selectedCabs = parseAddonIndexArray(rawSelectedCabs);
+
+        const quote = computePackageBookingTotals(pkg, {
+            checkInDate,
+            checkOutDate,
+            adults: adults || 1,
+            children: children || 0,
+            selectedExtras,
+            selectedFood,
+            selectedCabs,
+        });
+
+        if (quote.error) {
+            return res.status(400).json({ success: false, message: quote.error });
+        }
+
+        const paid = Number(amount);
+        if (Math.abs(paid - quote.totalWithTax) > 2) {
+            return res.status(400).json({
+                success: false,
+                message: 'Payment amount does not match the current quote (including tax). Please refresh and try again.',
+            });
         }
 
         const booking = new PackageBooking({
@@ -307,7 +368,7 @@ router.post('/initiate/package', async (req, res) => {
             primaryGuestPhone,
             totalGuests: totalGuests || (adults || 1) + (children || 0),
             notes,
-            amount,
+            amount: paid,
             status: 'Pending',
             paymentStatus: 'pending',
         });
@@ -316,7 +377,7 @@ router.post('/initiate/package', async (req, res) => {
         const txnId = `PKG${Date.now()}${booking._id.toString().slice(-6)}`;
         const params = createPaymentParams({
             txnId,
-            amount,
+            amount: paid,
             productInfo: `Package: ${packageTitle}`,
             firstName: primaryGuestName,
             email: primaryGuestEmail,
