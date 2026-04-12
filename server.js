@@ -7,6 +7,21 @@ const app = express();
 const PORT = process.env.PORT;
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/mahabaleshwar_db';
 
+/** Driver uses TLS for mongodb+srv. Forcing tls on mongodb://localhost breaks default local mongod. */
+function mongooseConnectOptions() {
+    const opts = { serverSelectionTimeoutMS: 15000 };
+    if (MONGODB_URI.startsWith('mongodb+srv://')) {
+        return opts;
+    }
+    if (/^mongodb:\/\/(localhost|127\.0\.0\.1)(:\d+)?\//i.test(MONGODB_URI)) {
+        return opts;
+    }
+    if (MONGODB_URI.startsWith('mongodb://')) {
+        opts.tls = true;
+    }
+    return opts;
+}
+
 // Middleware — CORS (browser admin + main site + env extras)
 const defaultOrigins = [
     'http://localhost:5173',
@@ -51,12 +66,7 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Database Connection
-mongoose.connect(MONGODB_URI, {
-    tls: true,
-})
-    .then(() => console.log('MongoDB connected successfully'))
-    .catch(err => console.error('MongoDB connection error:', err));
+mongoose.set('bufferCommands', false);
 
 // Basic Route
 app.get('/', (req, res) => {
@@ -112,7 +122,18 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/admin/coupons', couponRoutes);
 app.use('/api/coupons', couponPublicRoutes);
 
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
-});
+async function start() {
+    try {
+        await mongoose.connect(MONGODB_URI, mongooseConnectOptions());
+        console.log('MongoDB connected successfully');
+    } catch (err) {
+        console.error('MongoDB connection error:', err.message || err);
+        process.exit(1);
+    }
+    app.listen(PORT, () => {
+        console.log(`Server running on port ${PORT}`);
+    });
+}
+
+start();
 
