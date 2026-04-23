@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 
-const PAYU_KEY = process.env.PAYU_MERCHANT_KEY;
-const PAYU_SALT = process.env.PAYU_SALT;
+const PAYU_KEY = (process.env.PAYU_MERCHANT_KEY || '').trim();
+const PAYU_SALT = (process.env.PAYU_SALT || '').trim();
 const PAYU_MODE = (process.env.PAYU_MODE || 'TEST').toUpperCase();
 const PAYU_ENDPOINT = PAYU_MODE === 'LIVE'
     ? 'https://secure.payu.in/_payment'
@@ -15,22 +15,28 @@ const formatAmountForPayU = (amount) => {
 };
 
 /**
+ * Hash input fields must be plain strings and must not contain pipe delimiters.
+ * PayU uses "|" as the field separator, so a raw "|" inside a value corrupts hash layout.
+ */
+const normalizeHashField = (value) => String(value ?? '').replace(/\|/g, ' ').trim();
+
+/**
  * Forward hash for hosted checkout — must match:
  * sha512(key|txnid|amount|productinfo|firstname|email|udf1|udf2|udf3|udf4|udf5||||||SALT)
  * (five empty segments between udf5 and salt — exactly "||||||" in the docs)
  */
 const generatePaymentRequestHash = (params) => {
-    const key = params.key;
-    const txnid = params.txnid;
-    const amount = String(params.amount);
-    const productinfo = params.productinfo;
-    const firstname = params.firstname;
-    const email = params.email;
-    const udf1 = params.udf1 ?? '';
-    const udf2 = params.udf2 ?? '';
-    const udf3 = params.udf3 ?? '';
-    const udf4 = params.udf4 ?? '';
-    const udf5 = params.udf5 ?? '';
+    const key = normalizeHashField(params.key);
+    const txnid = normalizeHashField(params.txnid);
+    const amount = normalizeHashField(params.amount);
+    const productinfo = normalizeHashField(params.productinfo);
+    const firstname = normalizeHashField(params.firstname);
+    const email = normalizeHashField(params.email);
+    const udf1 = normalizeHashField(params.udf1);
+    const udf2 = normalizeHashField(params.udf2);
+    const udf3 = normalizeHashField(params.udf3);
+    const udf4 = normalizeHashField(params.udf4);
+    const udf5 = normalizeHashField(params.udf5);
     const hashString = `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|${udf1}|${udf2}|${udf3}|${udf4}|${udf5}||||||${PAYU_SALT}`;
     return crypto.createHash('sha512').update(hashString, 'utf8').digest('hex');
 };
@@ -44,20 +50,20 @@ const verifyPayUReverseHash = (params) => {
     if (!PAYU_SALT) return false;
     const received = (params.hash || '').toLowerCase();
     if (!received) return false;
-    const salt = PAYU_SALT;
-    const status = params.status ?? '';
-    const udf5 = params.udf5 ?? '';
-    const udf4 = params.udf4 ?? '';
-    const udf3 = params.udf3 ?? '';
-    const udf2 = params.udf2 ?? '';
-    const udf1 = params.udf1 ?? '';
-    const email = params.email ?? '';
-    const firstname = params.firstname ?? '';
-    const productinfo = params.productinfo ?? '';
-    const amount = params.amount != null ? String(params.amount) : '';
-    const txnid = params.txnid ?? '';
-    const key = params.key ?? '';
-    const additionalCharges = params.additionalCharges ?? params.additional_charges ?? '';
+    const salt = normalizeHashField(PAYU_SALT);
+    const status = normalizeHashField(params.status);
+    const udf5 = normalizeHashField(params.udf5);
+    const udf4 = normalizeHashField(params.udf4);
+    const udf3 = normalizeHashField(params.udf3);
+    const udf2 = normalizeHashField(params.udf2);
+    const udf1 = normalizeHashField(params.udf1);
+    const email = normalizeHashField(params.email);
+    const firstname = normalizeHashField(params.firstname);
+    const productinfo = normalizeHashField(params.productinfo);
+    const amount = normalizeHashField(params.amount != null ? String(params.amount) : '');
+    const txnid = normalizeHashField(params.txnid);
+    const key = normalizeHashField(params.key || PAYU_KEY);
+    const additionalCharges = normalizeHashField(params.additionalCharges ?? params.additional_charges ?? '');
     let hashString;
     if (additionalCharges) {
         hashString = `${additionalCharges}|${salt}|${status}||||||${udf5}|${udf4}|${udf3}|${udf2}|${udf1}|${email}|${firstname}|${productinfo}|${amount}|${txnid}|${key}`;
@@ -71,17 +77,17 @@ const verifyPayUReverseHash = (params) => {
 const createPaymentParams = ({ txnId, amount, productInfo, firstName, email, phone, udf1, udf2, surl, furl }) => {
     const amountStr = formatAmountForPayU(amount);
     const params = {
-        key: PAYU_KEY,
-        txnid: txnId,
+        key: normalizeHashField(PAYU_KEY),
+        txnid: normalizeHashField(txnId),
         amount: amountStr,
-        productinfo: productInfo,
-        firstname: firstName,
-        email,
-        phone: phone || '9999999999',
-        surl,
-        furl,
-        udf1: udf1 || '',
-        udf2: udf2 || '',
+        productinfo: normalizeHashField(productInfo),
+        firstname: normalizeHashField(firstName),
+        email: normalizeHashField(email),
+        phone: normalizeHashField(phone || '9999999999'),
+        surl: String(surl || ''),
+        furl: String(furl || ''),
+        udf1: normalizeHashField(udf1 || ''),
+        udf2: normalizeHashField(udf2 || ''),
         udf3: '',
         udf4: '',
         udf5: '',
@@ -90,9 +96,15 @@ const createPaymentParams = ({ txnId, amount, productInfo, firstName, email, pho
     return params;
 };
 
+const escapeHtmlAttr = (value) => String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+
 const getPaymentFormHtml = (params) => {
     const fields = Object.entries(params)
-        .map(([k, v]) => `<input type="hidden" name="${k}" value="${String(v).replace(/"/g, '&quot;')}" />`)
+        .map(([k, v]) => `<input type="hidden" name="${escapeHtmlAttr(k)}" value="${escapeHtmlAttr(v)}" />`)
         .join('\n');
     return `<!DOCTYPE html>
 <html>
