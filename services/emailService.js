@@ -30,6 +30,18 @@ const escapeHtml = (s) => {
         .replace(/"/g, '&quot;');
 };
 
+/** Short, typical Mahabaleshwar / Indian hill-resort wording — guest-facing booking emails */
+const BOOKING_TERMS_HTML = `
+      <div class="section">
+        <h2>Terms &amp; what to bring</h2>
+        <p style="margin:0;color:#2d3748;font-size:14px;line-height:1.55;">
+          Please carry valid government photo ID for all guests. Standard check-in is from 12:00 noon and check-out by 11:00 am unless the property confirms otherwise.
+          Hill weather can change quickly—carry light woollens and a small umbrella or rain layer in monsoon. Outside food, loud music, and unregistered visitors in rooms may not be allowed.
+          Smoking indoors and non-veg meals at strictly vegetarian properties are not permitted; any damage to the property may be billed. Applicable taxes and peak-season charges may apply.
+          Cancellation and refunds are as per the policy shared at booking or on the website. For changes, contact us at the earliest.
+        </p>
+      </div>`;
+
 const baseStyles = `
   body { font-family: Georgia, 'Times New Roman', serif; line-height: 1.55; color: #1a202c; margin: 0; padding: 0; background: #edf2f7; }
   .wrap { max-width: 640px; margin: 0 auto; padding: 24px 16px 40px; }
@@ -174,6 +186,7 @@ const sendHotelBookingConfirmation = async (booking, room, hotel, meta = {}) => 
           <tr><td class="label">Jain</td><td>${escapeHtml(String(booking.foodJain || 0))}</td></tr>
       </table></div>` : ''}
       ${booking.specialRequests ? `<div class="section"><h2>Special requests</h2><p style="margin:0;color:#2d3748;">${escapeHtml(booking.specialRequests)}</p></div>` : ''}
+      ${BOOKING_TERMS_HTML}
     </div>
     <div class="foot">Need to change dates? Contact us as soon as possible. See you in Mahabaleshwar.</div>
   </div>
@@ -253,6 +266,7 @@ const sendPackageBookingConfirmation = async (booking, meta = {}) => {
       </div>
       ${guestBlock}
       ${booking.notes ? `<div class="section"><h2>Notes</h2><p style="margin:0;color:#2d3748;">${escapeHtml(booking.notes)}</p></div>` : ''}
+      ${BOOKING_TERMS_HTML}
     </div>
     <div class="foot">We will follow up if anything else is needed. Enjoy Mahabaleshwar.</div>
   </div>

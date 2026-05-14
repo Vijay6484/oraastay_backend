@@ -302,6 +302,8 @@ router.post('/initiate/package', async (req, res) => {
             selectedExtras: rawSelectedExtras,
             selectedFood: rawSelectedFood,
             selectedCabs: rawSelectedCabs,
+            hotelId: reqHotelId,
+            roomId: reqRoomId,
         } = req.body;
 
         if (!packageId || !packageTitle || !checkInDate || !primaryGuestName || !primaryGuestEmail || !primaryGuestPhone || !amount) {
@@ -329,6 +331,43 @@ router.post('/initiate/package', async (req, res) => {
             return res.status(400).json({ success: false, message: 'Check-out date is required' });
         }
 
+        if (!reqHotelId) {
+            return res.status(400).json({ success: false, message: 'Please select a hotel for this package.' });
+        }
+
+        const selHotel = await Hotel.findById(reqHotelId).lean();
+        if (!selHotel) {
+            return res.status(400).json({ success: false, message: 'Selected hotel not found' });
+        }
+        if (selHotel.websiteVisible === false) {
+            return res.status(400).json({ success: false, message: 'This property is not available for online booking.' });
+        }
+
+        if (pkg.category === 'Couple' && selHotel.type !== 'Cottage') {
+            return res.status(400).json({ success: false, message: 'This package requires a cottage stay. Please select a cottage property.' });
+        }
+        if (pkg.category === 'Group' && selHotel.type !== 'Villa') {
+            return res.status(400).json({ success: false, message: 'This package requires a villa stay. Please select a villa property.' });
+        }
+
+        let validatedRoomId = null;
+        let roomForQuote = null;
+        if (reqRoomId) {
+            const selRoom = await Room.findById(reqRoomId).lean();
+            if (!selRoom || String(selRoom.hotelId) !== String(selHotel._id)) {
+                return res.status(400).json({ success: false, message: 'Selected room not found or does not belong to this hotel' });
+            }
+            validatedRoomId = selRoom._id;
+            roomForQuote = selRoom;
+        } else {
+            roomForQuote = await Room.findOne({ hotelId: selHotel._id }).lean();
+            if (roomForQuote) validatedRoomId = roomForQuote._id;
+        }
+
+        if (!roomForQuote) {
+            return res.status(400).json({ success: false, message: 'No bookable unit found for the selected property.' });
+        }
+
         const selectedExtras = parseAddonIndexArray(rawSelectedExtras);
         const selectedFood = parseAddonIndexArray(rawSelectedFood);
         const selectedCabs = parseAddonIndexArray(rawSelectedCabs);
@@ -341,10 +380,21 @@ router.post('/initiate/package', async (req, res) => {
             selectedExtras,
             selectedFood,
             selectedCabs,
-        });
+        }, roomForQuote);
 
         if (quote.error) {
             return res.status(400).json({ success: false, message: quote.error });
+        }
+
+        if (validatedRoomId) {
+            const avail = await getRoomAvailability({ roomId: validatedRoomId, checkInDate, checkOutDate });
+            const needRooms = Math.max(1, quote.roomsBooked || 1);
+            if (avail.success && avail.data.minRemaining < needRooms) {
+                return res.status(409).json({
+                    success: false,
+                    message: 'Not enough rooms left at this property for your group on these dates. Please pick another hotel or reduce guests.',
+                });
+            }
         }
 
         const paid = Number(amount);
@@ -354,6 +404,8 @@ router.post('/initiate/package', async (req, res) => {
                 message: 'Payment amount does not match the current quote (including tax). Please refresh and try again.',
             });
         }
+
+        const validatedHotelId = selHotel._id;
 
         const booking = new PackageBooking({
             packageId,
@@ -367,6 +419,8 @@ router.post('/initiate/package', async (req, res) => {
             primaryGuestEmail,
             primaryGuestPhone,
             totalGuests: totalGuests || (adults || 1) + (children || 0),
+            hotelId: validatedHotelId,
+            roomId: validatedRoomId || undefined,
             notes,
             amount: paid,
             status: 'Pending',
@@ -441,6 +495,34 @@ const handleSuccessCallback = async (req, res) => {
                 { status: 'Confirmed', paymentStatus: 'success', paymentTxnId: payRef },
                 { new: true }
             );
+
+            // Create a linked RoomBooking to block hotel inventory for the package dates
+            if (booking && booking.hotelId && booking.roomId) {
+                try {
+                    const linkedRoomBooking = new RoomBooking({
+                        roomId: booking.roomId,
+                        hotelId: booking.hotelId,
+                        guestName: booking.primaryGuestName,
+                        guestEmail: booking.primaryGuestEmail,
+                        guestPhone: booking.primaryGuestPhone || '',
+                        checkInDate: booking.checkInDate,
+                        checkOutDate: booking.checkOutDate || booking.checkInDate,
+                        guests: { adults: booking.adults || 1, children: booking.children || 0, rooms: 1 },
+                        totalAmount: booking.amount || 0,
+                        advanceAmount: booking.amount || 0,
+                        status: 'Confirmed',
+                        paymentStatus: 'success',
+                        paymentTxnId: payRef,
+                        specialRequests: `Package Booking: ${booking.packageTitle}`,
+                        packageBookingId: booking._id,
+                    });
+                    await linkedRoomBooking.save();
+                    console.log(`Linked RoomBooking ${linkedRoomBooking._id} created for Package ${booking._id}`);
+                } catch (rbErr) {
+                    console.error('Failed to create linked RoomBooking for package:', rbErr);
+                }
+            }
+
             if (booking && booking.primaryGuestEmail) {
                 await sendPackageBookingConfirmation(booking, { paymentRef: payRef, payuMode: params.mode });
             }

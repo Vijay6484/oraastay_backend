@@ -15,6 +15,8 @@ const HotelSchema = new mongoose.Schema({
     images: [{ type: String }], // Array of image URLs
     video: { type: String }, // Video URL
     featured: { type: Boolean, default: false },
+    /** When false, property is hidden from public hotel listings and detail pages (admin can still manage). */
+    websiteVisible: { type: Boolean, default: true },
     type: {
         type: String,
         enum: ['Villa', 'Cottage'],

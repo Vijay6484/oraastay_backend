@@ -29,7 +29,8 @@ const RoomBookingSchema = new mongoose.Schema({
         default: 'pending'
     },
     paymentTxnId: { type: String, default: null },
-    specialRequests: { type: String }
+    specialRequests: { type: String },
+    packageBookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'PackageBooking' }
 }, { timestamps: true });
 
 module.exports = mongoose.model('RoomBooking', RoomBookingSchema);

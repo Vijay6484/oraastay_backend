@@ -27,7 +27,7 @@ function getDatesBetween(startStr, endStr) {
 // Search hotels by dates and guests
 router.get('/search', async (req, res) => {
     try {
-        let { checkIn, checkOut, adults, children } = req.query;
+        let { checkIn, checkOut, adults, children, propertyType } = req.query;
         const totalGuests = Math.max(0, parseInt(adults || '1', 10) + parseInt(children || '0', 10)) || 1;
 
         if (checkOut && checkIn && new Date(checkOut) <= new Date(checkIn)) {
@@ -36,7 +36,13 @@ router.get('/search', async (req, res) => {
             checkOut = d.toISOString().split('T')[0];
         }
 
-        let hotels = await Hotel.find();
+        const visibilityFilter = { websiteVisible: { $ne: false } };
+        let hotels = await Hotel.find(visibilityFilter);
+
+        if (propertyType && String(propertyType).trim()) {
+            const pt = String(propertyType).trim();
+            hotels = hotels.filter((h) => h.type === pt);
+        }
 
         if (checkIn && checkOut && totalGuests > 0) {
             const dates = getDatesBetween(checkIn, checkOut);
@@ -117,10 +123,10 @@ router.get('/search', async (req, res) => {
     }
 });
 
-// Get all hotels
+// Get all hotels (public: only website-visible)
 router.get('/', async (req, res) => {
     try {
-        const hotels = await Hotel.find().lean();
+        const hotels = await Hotel.find({ websiteVisible: { $ne: false } }).lean();
         const rooms = await Room.find({ hotelId: { $in: hotels.map(h => h._id) } }).lean();
         
         const hotelSubtypesMap = {};
@@ -150,6 +156,9 @@ router.get('/by-id/:id', async (req, res) => {
         }
         const hotel = await Hotel.findById(id).lean();
         if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+        if (hotel.websiteVisible === false) {
+            return res.status(404).json({ message: 'Hotel not found' });
+        }
 
         if (!hotel.rating || hotel.rating <= 0) {
             hotel.rating = Number((Math.random() * 0.4 + 4.5).toFixed(1));
@@ -165,6 +174,9 @@ router.get('/:slug', async (req, res) => {
     try {
         const hotel = await Hotel.findOne({ slug: req.params.slug }).lean();
         if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+        if (hotel.websiteVisible === false) {
+            return res.status(404).json({ message: 'Hotel not found' });
+        }
         
         if (!hotel.rating || hotel.rating <= 0) {
             hotel.rating = Number((Math.random() * 0.4 + 4.5).toFixed(1));

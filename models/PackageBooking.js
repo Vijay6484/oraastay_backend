@@ -38,6 +38,8 @@ const packageBookingSchema = new mongoose.Schema({
     primaryGuestEmail: { type: String, required: true },
     primaryGuestPhone: { type: String, required: true },
     totalGuests: { type: Number },  // adults + children
+    hotelId: { type: mongoose.Schema.Types.ObjectId, ref: 'Hotel' },
+    roomId: { type: mongoose.Schema.Types.ObjectId, ref: 'Room' },
     amount: { type: Number },
     paymentStatus: {
         type: String,

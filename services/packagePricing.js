@@ -1,4 +1,9 @@
-const { nightsBetween, DEFAULT_TAX_RATE } = require('./roomPricing');
+const {
+    nightsBetween,
+    DEFAULT_TAX_RATE,
+    effectiveMaxGuestsPerRoom,
+    computeHotelRoomBookingTotals,
+} = require('./roomPricing');
 
 function parseIndexArray(v) {
     if (!Array.isArray(v)) return [];
@@ -17,11 +22,29 @@ function sumSelectedUnitPrices(list, indices) {
     return sum;
 }
 
+function minRoomsForGuests(roomDoc, adults, children) {
+    const cap = roomDoc.capacity || { adults: 2, children: 0 };
+    const bg = Number(roomDoc.baseGuestsIncluded) || 0;
+    const maxPerRoom = effectiveMaxGuestsPerRoom(
+        roomDoc.maxPersonsVilla,
+        cap,
+        {
+            adultRate: roomDoc.adultRate,
+            childRate: roomDoc.childRate,
+            baseGuestsIncluded: bg > 0 ? bg : 0,
+        },
+    );
+    const headcount = adults + children;
+    return Math.max(1, Math.ceil(headcount / maxPerRoom));
+}
+
 /**
- * Package pre-tax total: base + extras/food (per person-day or per couple-day) + fixed cabs.
- * Then 15% tax on that subtotal (same model as hotel room + add-ons).
+ * Package pre-tax total: selected hotel stay (room rate × units × nights, incl. extra-guest charges)
+ * + package extras/food (per person-day or per couple-day) + fixed cabs.
+ * Then 15% tax on that subtotal.
+ * @param {object|null} roomDoc — Room document for the selected hotel (required for website bookings).
  */
-function computePackageBookingTotals(pkg, input) {
+function computePackageBookingTotals(pkg, input, roomDoc) {
     const {
         checkInDate,
         checkOutDate,
@@ -42,11 +65,11 @@ function computePackageBookingTotals(pkg, input) {
         return { error: 'Check-in and check-out dates are required.' };
     }
 
+    if (!roomDoc) {
+        return { error: 'Please select a hotel to calculate the package price.' };
+    }
+
     const days = nightsBetween(checkInDate, checkOutDate);
-    const baseNumeric =
-        Number(pkg.numericPrice) ||
-        parseInt(String(pkg.price || '').replace(/\D/g, ''), 10) ||
-        0;
 
     const extraServices = pkg.extraServices || [];
     const foodOptions = pkg.foodOptions || [];
@@ -58,7 +81,8 @@ function computePackageBookingTotals(pkg, input) {
     const cabTotal = sumSelectedUnitPrices(cabServices, selectedCabs);
 
     const isCouple = pkg.category === 'Couple';
-    let preTaxSubtotal = 0;
+    let couples = 0;
+    let headcount = 0;
 
     if (isCouple) {
         if (children !== 0) {
@@ -66,21 +90,47 @@ function computePackageBookingTotals(pkg, input) {
                 error: 'For couple packages, use adults only (2 per couple). Please contact us for special requests.',
             };
         }
-        const couples = adults / 2;
+        couples = adults / 2;
         if (!Number.isInteger(couples) || couples < 1) {
             return { error: 'Couple packages need an even number of adults (2 per couple).' };
         }
-        preTaxSubtotal =
-            baseNumeric * couples * days + extrasFoodUnitDay * couples * days + cabTotal;
+        headcount = adults;
     } else {
-        const headcount = adults + children;
+        headcount = adults + children;
         if (headcount < 1) {
             return { error: 'At least one guest is required.' };
         }
-        preTaxSubtotal =
-            (baseNumeric + extrasFoodUnitDay) * headcount * days + cabTotal;
     }
 
+    const rooms = minRoomsForGuests(roomDoc, adults, children);
+    const hotelTotals = computeHotelRoomBookingTotals({
+        roomPrice: roomDoc.price,
+        adultRate: roomDoc.adultRate,
+        childRate: roomDoc.childRate,
+        capacity: roomDoc.capacity || { adults: 2, children: 0 },
+        baseGuestsIncluded: roomDoc.baseGuestsIncluded,
+        maxPersonsVilla: roomDoc.maxPersonsVilla,
+        rooms,
+        nights: days,
+        adults,
+        children,
+    });
+
+    if (!hotelTotals.validGuestCount) {
+        return {
+            error: 'Guest count does not fit the selected accommodation. Try another property or adjust guests.',
+        };
+    }
+
+    const hotelPreTax = hotelTotals.subtotal;
+    let packageAddonsPreTax = 0;
+    if (isCouple) {
+        packageAddonsPreTax = extrasFoodUnitDay * couples * days + cabTotal;
+    } else {
+        packageAddonsPreTax = extrasFoodUnitDay * headcount * days + cabTotal;
+    }
+
+    const preTaxSubtotal = hotelPreTax + packageAddonsPreTax;
     const taxes = preTaxSubtotal * DEFAULT_TAX_RATE;
     const totalWithTax = preTaxSubtotal + taxes;
 
@@ -89,7 +139,9 @@ function computePackageBookingTotals(pkg, input) {
         taxes,
         totalWithTax,
         days,
-        baseNumeric,
+        hotelPreTax,
+        packageAddonsPreTax,
+        roomsBooked: rooms,
         extrasFoodUnitDay,
         cabTotal,
         isCouple,

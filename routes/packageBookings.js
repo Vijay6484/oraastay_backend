@@ -7,7 +7,7 @@ const requirePkgBookingsAdmin = [requireAuth, requireModuleAccess('package_booki
 // Get all package bookings
 router.get('/', ...requirePkgBookingsAdmin, async (req, res) => {
     try {
-        const bookings = await PackageBooking.find().sort({ createdAt: -1 });
+        const bookings = await PackageBooking.find().sort({ createdAt: -1 }).populate('hotelId', 'name slug images location').populate('roomId', 'name type');
         res.json({ success: true, data: bookings });
     } catch (err) {
         res.status(500).json({ success: false, message: err.message });

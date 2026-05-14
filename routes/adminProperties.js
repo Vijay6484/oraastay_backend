@@ -30,6 +30,7 @@ function formatHotelResponse(hotel, rooms) {
             : (hotel.unitCapacity?.adults ? hotel.unitCapacity.adults + (hotel.unitCapacity.children || 0) : 2),
         rooms: hotel.inventory || rooms.length || 0,
         available: true,
+        websiteVisible: hotel.websiteVisible !== false,
         features: hotel.amenities || [],
         rules: hotel.rules || [],
         images: hotel.images || [],
@@ -86,7 +87,10 @@ router.post('/accommodations', ...requireProperties, async (req, res) => {
             hotelData.managerId = hotelData.managerId || null;
         }
 
-        const hotel = new Hotel(hotelData);
+        const hotel = new Hotel({
+            ...hotelData,
+            websiteVisible: hotelData.websiteVisible !== false,
+        });
         const savedHotel = await hotel.save();
 
         const syncedRoom = await syncDefaultRoomForHotel(savedHotel);
@@ -178,6 +182,7 @@ router.get('/accommodations/:id', ...requireProperties, async (req, res) => {
                 extraServices: hotel.extraServices || [],
                 cabServices: hotel.cabServices || [],
                 foodOptions: hotel.foodOptions || [],
+                websiteVisible: hotel.websiteVisible !== false,
             },
             roomsData: rooms,
         });
@@ -227,6 +232,31 @@ router.put('/accommodations/:id', ...requireProperties, async (req, res) => {
         res.json({ message: 'Accommodation updated successfully', hotel: updatedHotel });
     } catch (error) {
         console.error('Error updating accommodation:', error);
+        res.status(500).json({ message: 'Internal Server Error', error: error.message });
+    }
+});
+
+/** Toggle whether property appears on public website (admin/manager). */
+router.patch('/accommodations/:id/website-visible', ...requireProperties, async (req, res) => {
+    try {
+        const hotel = await Hotel.findById(req.params.id);
+        if (!hotel) return res.status(404).json({ message: 'Hotel not found' });
+
+        const allowed = await assertManagerOwnsHotel(req.authUser, hotel._id.toString());
+        if (!allowed) {
+            return res.status(403).json({ message: 'Access denied' });
+        }
+
+        const currentlyVisible = hotel.websiteVisible !== false;
+        const nextVisible = typeof req.body?.websiteVisible === 'boolean'
+            ? req.body.websiteVisible
+            : !currentlyVisible;
+
+        hotel.websiteVisible = nextVisible;
+        await hotel.save();
+        res.json({ websiteVisible: hotel.websiteVisible !== false });
+    } catch (error) {
+        console.error('Error toggling website visibility:', error);
         res.status(500).json({ message: 'Internal Server Error', error: error.message });
     }
 });
